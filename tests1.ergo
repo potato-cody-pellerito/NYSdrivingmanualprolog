@@ -1,0 +1,2296 @@
+// NYS_row_tests.ergo
+// Tests for NYSdrivingmanual.ergo right-of-way rules
+
+
+// ===========================
+// Rule 1: Already in intersection
+// ===========================
+
+// Situation R1: CarIn is already in the intersection, CarAppr is approaching.
+participant(R1, CarIn).
+participant(R1, CarAppr).
+
+straight(CarIn, DIn1).
+straight(CarAppr, DAppr1).
+
+drive(CarIn, DIn1).
+drive(CarAppr, DAppr1).
+
+inIntersection(DIn1, I1).
+approachingIntersection(DAppr1, I1).
+
+// Test 1a: rightOfWay(R1, CarIn) should hold
+?- \if ( rightOfWay(R1, ?D), ?D == CarIn ) \then
+       writeln(rule1_row=ok)@\io
+   \else writeln(rule1_row=failed)@\io.
+
+// Test 1b: CarAppr is illegal (fails to yield)
+?- \if illegalDrive(CarAppr, DAppr1) \then
+       writeln(rule1_illegal=ok)@\io
+   \else writeln(rule1_illegal=failed)@\io.
+
+
+
+// ===========================
+// Rule 2: Left-turn yields to straight/right
+// ===========================
+
+// Situation R2: CarStraight goes straight, CarLeft turns left from opposite directions.
+participant(R2, CarStraight).
+participant(R2, CarLeft).
+
+straight(CarStraight, DS2).
+leftTurn(CarLeft, DL2).
+
+drive(CarStraight, DS2).
+drive(CarLeft, DL2).
+
+approachingIntersection(DS2, I2).
+approachingIntersection(DL2, I2).
+
+oppositeDirections(DS2, DL2).
+
+// Test 2a: rightOfWay(R2, CarStraight) should hold
+?- \if ( rightOfWay(R2, ?D), ?D == CarStraight ) \then
+       writeln(rule2_row=ok)@\io
+   \else writeln(rule2_row=failed)@\io.
+
+// Test 2b: CarLeft is illegal if it does not yield
+?- \if illegalDrive(CarLeft, DL2) \then
+       writeln(rule2_illegal=ok)@\io
+   \else writeln(rule2_illegal=failed)@\io.
+
+
+
+// ===========================
+// Rule 3: Driver on the right goes first at STOP
+// ===========================
+
+// Situation R3: CarRight is to the right of CarLeft, both at STOP at right-angle intersection.
+participant(R3, CarRight).
+participant(R3, CarLeft).
+
+straight(CarRight, DR3).
+straight(CarLeft,  DL3).
+
+drive(CarRight, DR3).
+drive(CarLeft, DL3).
+
+intersectingRoads(DR3, DL3).
+
+atStopControl(DR3).
+atStopControl(DL3).
+
+toTheRightOf(DR3, DL3).
+
+// Test 3a: rightOfWay(R3, CarRight) should hold
+?- \if ( rightOfWay(R3, ?D), ?D == CarRight ) \then
+       writeln(rule3_row=ok)@\io
+   \else writeln(rule3_row=failed)@\io.
+
+// Test 3b: CarLeft is illegal if it goes without yielding
+?- \if illegalDrive(CarLeft, DL3) \then
+       writeln(rule3_illegal=ok)@\io
+   \else writeln(rule3_illegal=failed)@\io.
+
+
+
+// ===========================
+// Rule 4: Driveway / private road entering roadway
+// ===========================
+
+// Situation R4: CarEnter comes from non-roadway, CarRoad is on roadway.
+participant(R4, CarEnter).
+participant(R4, CarRoad).
+
+rightTurn(CarEnter, DE4).
+straight(CarRoad,  DR4).
+
+drive(CarEnter, DE4).
+drive(CarRoad, DR4).
+
+fromNonRoadway(DE4).
+onRoadway(DR4).
+
+sameRoad(DE4, DR4).
+
+// Test 4a: mustYield(CarEnter, CarRoad, R4) should hold
+?- \if mustYield(CarEnter, CarRoad, R4) \then
+       writeln(rule4_mustYield=ok)@\io
+   \else writeln(rule4_mustYield=failed)@\io.
+
+// Test 4b: rightOfWay(R4, CarRoad) should also hold via the bridge rule
+?- \if ( rightOfWay(R4, ?D), ?D == CarRoad ) \then
+       writeln(rule4_row=ok)@\io
+   \else writeln(rule4_row=failed)@\io.
+
+// Test 4c: CarEnter is illegal if it does not yield
+?- \if illegalDrive(CarEnter, DE4) \then
+       writeln(rule4_illegal=ok)@\io
+   \else writeln(rule4_illegal=failed)@\io.
+
+// =======================
+// Pedestrians / bicyclists in crosswalks
+// =======================
+
+// Situation P1: Driver CarP1 is approaching a crosswalk where Ped1 is crossing.
+participant(P1, CarP1).
+participant(P1, Ped1).
+
+pedestrian(Ped1).
+
+straight(CarP1, DCarP1).
+drive(CarP1, DCarP1).
+
+inCrosswalk(Ped1, CW1).
+approachingCrosswalk(DCarP1, CW1).
+
+// Test P1a: Ped1 has right-of-way in situation P1.
+?- \if ( rightOfWay(P1, ?X), ?X == Ped1 ) \then
+       writeln(ped_row=ok)@\io
+   \else writeln(ped_row=failed)@\io.
+
+// Test P1b: CarP1 is illegal if it does not yield to Ped1.
+?- \if illegalDrive(CarP1, DCarP1) \then
+       writeln(ped_illegal=ok)@\io
+   \else writeln(ped_illegal=failed)@\io.
+// =======================
+// Blocking an intersection / causing gridlock
+// =======================
+
+// Situation G1: CarG1 faces an intersection that is backed up beyond it
+// and cannot clear, but still enters.
+participant(G1, CarG1).
+
+straight(CarG1, DG1).
+drive(CarG1, DG1).
+
+facesIntersection(DG1, Int1).
+backedUpBeyond(Int1).
+cannotClear(DG1, Int1).
+entersIntersection(DG1, Int1).
+
+// Test G1: CarG1 is illegally blocking the intersection.
+?- \if illegalBlockIntersection(CarG1, DG1) \then
+       writeln(block_intersection=ok)@\io
+   \else writeln(block_intersection=failed)@\io.
+
+
+
+// Situation G2: CarG2 is blocking a cross-street (gridlock).
+participant(G2, CarG2).
+
+straight(CarG2, DG2).
+drive(CarG2, DG2).
+
+blocksCrossStreet(DG2, St1).
+crossStreet(St1).
+
+// Test G2: CarG2 is causing gridlock by blocking a cross-street.
+?- \if illegalBlockIntersection(CarG2, DG2) \then
+       writeln(block_crossstreet=ok)@\io
+   \else writeln(block_crossstreet=failed)@\io.
+// =======================
+// Roundabout / rotary: entering must yield
+// =======================
+
+// Situation RND1: CarIn is already in the roundabout; CarApproach is about to enter.
+participant(RND1, CarIn).
+participant(RND1, CarApproach).
+
+drive(CarIn, DInRnd).
+drive(CarApproach, DApprRnd).
+
+inRoundabout(DInRnd, Circle1).
+approachingRoundabout(DApprRnd, Circle1).
+
+// Test RND1a: CarIn has right-of-way.
+?- \if ( rightOfWay(RND1, ?X), ?X == CarIn ) \then
+       writeln(roundabout_row=ok)@\io
+   \else writeln(roundabout_row=failed)@\io.
+
+// Test RND1b: CarApproach is illegal if it does not yield.
+?- \if illegalDrive(CarApproach, DApprRnd) \then
+       writeln(roundabout_illegal=ok)@\io
+   \else writeln(roundabout_illegal=failed)@\io.
+
+// EV1: Driver must pull right and stop when EV approaches
+participant(EV1, Driver1).
+participant(EV1, EV).
+
+emergencyVehicle(EV).
+lightsOn(EV).
+
+straight(Driver1, D1).
+drive(Driver1, D1).
+drive(EV, DEV1).
+
+detects(Driver1, EV).
+
+// Test: EV should have ROW
+?- \if (rightOfWay(EV1, ?X), ?X == EV) \then
+       writeln(ev1_row=ok)@\io
+   \else writeln(ev1_row=failed)@\io.
+
+// Test: Driver1 is illegal if they don't yield
+?- \if illegalDrive(Driver1, D1) \then
+       writeln(ev1_illegal=ok)@\io
+   \else writeln(ev1_illegal=failed)@\io.
+
+participant(EV2, Driver2).
+participant(EV2, EV2car).
+
+emergencyVehicle(EV2car).
+sirenOn(EV2car).
+
+straight(Driver2, D2).
+drive(Driver2, D2).
+drive(EV2car, DEV2).
+
+inIntersection(D2, IntA).
+detects(Driver2, EV2car).
+
+// Test: must clear intersection
+?- \if mustClearIntersection(Driver2, EV2) \then
+       writeln(ev2_clear=ok)@\io
+   \else writeln(ev2_clear=failed)@\io.
+
+// Test: required action = clearIntersection
+?- \if (requiredAction(Driver2, EV2, clearIntersection)) \then
+       writeln(ev2_action=ok)@\io
+   \else writeln(ev2_action=failed)@\io.
+
+
+participant(EV3, Driver3).
+participant(EV3, EV3car).
+
+emergencyVehicle(EV3car).
+lightsOn(EV3car).
+
+straight(Driver3, D3).
+drive(Driver3, D3).
+drive(EV3car, DEv3).
+
+detects(Driver3, EV3car).
+oppositeLane(D3, DEv3).
+
+// Test: EV has ROW
+?- \if (rightOfWay(EV3, ?X), ?X == EV3car) \then
+       writeln(ev3_row=ok)@\io
+   \else writeln(ev3_row=failed)@\io.
+
+// Driver must still pull over even if EV in opposite direction
+?- \if mustYield(Driver3, EV3car, EV3) \then
+       writeln(ev3_mustYield=ok)@\io
+   \else writeln(ev3_mustYield=failed)@\io.
+
+participant(EV4, Driver4).
+participant(EV4, EV4car).
+
+emergencyVehicle(EV4car).
+sirenOn(EV4car).
+
+straight(Driver4, D4).
+drive(Driver4, D4).
+drive(EV4car, DEV4).
+
+hearsSiren(Driver4, EV4car).
+detects(Driver4, EV4car).   // represents "unsure where it is"
+
+// Driver must still pull over right
+?- \if mustYield(Driver4, EV4car, EV4) \then
+       writeln(ev4_mustYield=ok)@\io
+   \else writeln(ev4_mustYield=failed)@\io.
+
+// =======================
+// Move Over Law - multi-lane highway
+// =======================
+
+// MO1: Driver passes a stopped tow truck with amber lights on, on a multi-lane highway.
+participant(MO1, DriverMO1).
+participant(MO1, TowTruck1).
+
+hazardVehicle(TowTruck1).
+amberLightsOn(TowTruck1).
+
+straight(DriverMO1, DMO1).
+stopped(DTow1).
+
+drive(TowTruck1, DTow1).
+
+onRoad(DMO1, Hwy1).
+onRoad(DTow1, Hwy1).
+
+controlledAccess(Hwy1).
+multiLane(Hwy1).
+
+// Test: Driver must reduce speed whenever passing such a vehicle
+?- \if mustReduceSpeedMoveOver(DriverMO1, MO1) \then
+       writeln(moveover1_reduce=ok)@\io
+   \else writeln(moveover1_reduce=failed)@\io.
+
+// Test: On multi-lane controlled-access road, must also change lane away if possible
+?- \if mustChangeLaneMoveOver(DriverMO1, MO1) \then
+       writeln(moveover1_changelane=ok)@\io
+   \else writeln(moveover1_changelane=failed)@\io.
+
+// =======================
+// Move Over Law - two-lane road
+// =======================
+
+// MO2: Driver passes stopped hazard vehicle on a normal two-lane road.
+participant(MO2, DriverMO2).
+participant(MO2, Plow1).
+
+hazardVehicle(Plow1).
+amberLightsOn(Plow1).
+
+straight(DriverMO2, DMO2).
+stopped(DPlow1).
+
+drive(Plow1, DPlow1).
+
+onRoad(DMO2, Rural1).
+onRoad(DPlow1, Rural1).
+
+// Note: Rural1 is NOT controlled-access / multi-lane, so only speed reduction required.
+
+// Test: must reduce speed
+?- \if mustReduceSpeedMoveOver(DriverMO2, MO2) \then
+       writeln(moveover2_reduce=ok)@\io
+   \else writeln(moveover2_reduce=failed)@\io.
+
+// Test: must NOT be required to change lane (no multi-lane controlled-access)
+?- \if (\naf mustChangeLaneMoveOver(DriverMO2, MO2)) \then
+       writeln(moveover2_changelane_absent=ok)@\io
+   \else writeln(moveover2_changelane_absent=failed)@\io.
+
+// =======================
+// Blue / green / amber courtesy lights
+// =======================
+
+// LGT1: Volunteer firefighter with blue light; normal driver should yield as courtesy if safe.
+participant(LGT1, NormalDriver1).
+participant(LGT1, VolunteerFire1).
+
+blueLightVehicle(VolunteerFire1).
+lightsOn(VolunteerFire1).
+
+straight(NormalDriver1, DNorm1).
+straight(VolunteerFire1, DVol1).
+
+safeToYield(NormalDriver1, VolunteerFire1, LGT1).
+
+// Test: courtesy yield is recommended
+?- \if shouldYieldCourtesy(NormalDriver1, VolunteerFire1, LGT1) \then
+       writeln(lights1_courtesy=ok)@\io
+   \else writeln(lights1_courtesy=failed)@\io.
+
+// Test: but they do NOT automatically get right-of-way or mustYield (not emergencyVehicle)
+?- \if (\naf mustYield(NormalDriver1, VolunteerFire1, LGT1),
+        \naf rightOfWay(LGT1, VolunteerFire1)) \then
+       writeln(lights1_no_mustYield=ok)@\io
+   \else writeln(lights1_no_mustYield=failed)@\io.
+
+// Courtesy yield: blue/green/amber lights are NOT emergency vehicles.
+// You are not required to yield ROW, but you should if safe.
+
+
+shouldYieldCourtesy(?Driver, ?Other, ?Situation) :-
+    participant(?Situation, ?Driver),
+    participant(?Situation, ?Other),
+    ?Driver != ?Other,
+
+    (   blueLightVehicle(?Other)
+    ;   greenLightVehicle(?Other)
+    ;   amberLightVehicle(?Other)
+    ),
+
+    safeToYield(?Driver, ?Other, ?Situation).
+
+// =======================
+// U-TURN TESTS
+// =======================
+
+// UT1: Legal U-turn with green left arrow, good visibility, correct lane
+participant(UT1, D1).
+participant(UT1, D1Other).
+
+performingUTurn(D1, Dr1).
+uTurn(D1, Dr1).
+drive(D1, Dr1).
+
+startsInLane(Dr1, L1).
+leftmostLane(L1).
+
+visibility(Dr1, 800).         // > 500 feet
+
+greenLeftArrow(S1).
+controls(S1, Dr1).
+
+// Other driver approaching intersection, so D1 must still yield
+drive(D1Other, Dr1Other).
+approachingIntersection(Dr1Other, IntUT1).
+
+// Test UT1a: U-turn is allowed
+?- \if allowedUTurn(D1, UT1) \then
+       writeln(ut1_allowed=ok)@\io
+   \else writeln(ut1_allowed=failed)@\io.
+
+// Test UT1b: U-turn is NOT illegal here
+?- \if illegalUTurn(D1, Dr1) \then
+       writeln(ut1_not_illegal=failed)@\io
+   \else writeln(ut1_not_illegal=ok)@\io.
+
+// Test UT1c: D1 must yield to the other driver
+?- \if mustYield(D1, D1Other, UT1) \then
+       writeln(ut1_mustYield=ok)@\io
+   \else writeln(ut1_mustYield=failed)@\io.
+
+
+// UT2: Illegal because visibility < 500 ft (hill/curve/etc.)
+participant(UT2, D2).
+
+performingUTurn(D2, Dr2).
+uTurn(D2, Dr2).
+drive(D2, Dr2).
+
+startsInLane(Dr2, L1).
+leftmostLane(L1).
+
+visibility(Dr2, 200).         // < 500 feet
+
+?- \if illegalUTurn(D2, Dr2) \then
+       writeln(ut2_low_visibility=ok)@\io
+   \else writeln(ut2_low_visibility=failed)@\io.
+
+
+// UT3: Illegal because starting from wrong lane (not leftmost)
+participant(UT3, D3).
+
+performingUTurn(D3, Dr3).
+uTurn(D3, Dr3).
+drive(D3, Dr3).
+
+startsInLane(Dr3, RightLane). // not leftmost lane
+visibility(Dr3, 800).
+
+?- \if illegalUTurn(D3, Dr3) \then
+       writeln(ut3_wrong_lane=ok)@\io
+   \else writeln(ut3_wrong_lane=failed)@\io.
+
+
+// UT4: Illegal because of NO U-TURN sign
+participant(UT4, D4).
+
+performingUTurn(D4, Dr4).
+uTurn(D4, Dr4).
+drive(D4, Dr4).
+
+startsInLane(Dr4, L1).
+leftmostLane(L1).
+visibility(Dr4, 800).
+
+noUTurnSignPosted(Dr4).
+
+?- \if illegalUTurn(D4, Dr4) \then
+       writeln(ut4_sign=ok)@\io
+   \else writeln(ut4_sign=failed)@\io.
+
+
+// UT5: Illegal on limited-access expressway
+participant(UT5, D5).
+
+performingUTurn(D5, Dr5).
+uTurn(D5, Dr5).
+drive(D5, Dr5).
+
+startsInLane(Dr5, L1).
+leftmostLane(L1).
+visibility(Dr5, 800).
+
+onLimitedAccessExpressway(Dr5).
+
+?- \if illegalUTurn(D5, Dr5) \then
+       writeln(ut5_expressway=ok)@\io
+   \else writeln(ut5_expressway=failed)@\io.
+
+
+// UT6: Illegal in school zone
+participant(UT6, D6).
+
+performingUTurn(D6, Dr6).
+uTurn(D6, Dr6).
+drive(D6, Dr6).
+
+startsInLane(Dr6, L1).
+leftmostLane(L1).
+visibility(Dr6, 800).
+
+inSchoolZone(Dr6).
+
+?- \if illegalUTurn(D6, Dr6) \then
+       writeln(ut6_school_zone=ok)@\io
+   \else writeln(ut6_school_zone=failed)@\io.
+
+
+
+// =======================
+// Sign Classification Tests
+// =======================
+
+// SGN1: White rectangle + black letters = regulation sign
+whiteRectangle(SignSGN1).
+blackLetters(SignSGN1).
+
+?- \if regulationSign(SignSGN1) \then
+       writeln(sgn1_regulation=ok)@\io
+   \else writeln(sgn1_regulation=failed)@\io.
+
+// SGN2: Yellow diamond + black letters = warning sign
+yellowDiamond(SignSGN2).
+blackLetters(SignSGN2).
+
+?- \if warningSign(SignSGN2) \then
+       writeln(sgn2_warning=ok)@\io
+   \else writeln(sgn2_warning=failed)@\io.
+
+// SGN3: Green + white letters = destination sign
+greenSign(SignSGN3).
+whiteLetters(SignSGN3).
+
+?- \if destinationSign(SignSGN3) \then
+       writeln(sgn3_destination=ok)@\io
+   \else writeln(sgn3_destination=failed)@\io.
+
+// SGN4: Blue + white letters = service sign
+blueSign(SignSGN4).
+whiteLetters(SignSGN4).
+
+?- \if serviceSign(SignSGN4) \then
+       writeln(sgn4_service=ok)@\io
+   \else writeln(sgn4_service=failed)@\io.
+
+
+
+// =======================
+// Stop Sign Tests
+// =======================
+
+// SS1: Stop sign with stop line — must stop at stop line
+participant(SS1, CarSS1).
+straight(CarSS1, DSS1).
+drive(CarSS1, DSS1).
+stopSign(StopSignSS1).
+controls(StopSignSS1, DSS1).
+stopLine(SL1, DSS1).
+facesIntersection(DSS1, IntSS1).
+stoppedAtSign(CarSS1, DSS1).
+
+?- \if mustStopAt(CarSS1, DSS1, stopLine(SL1)) \then
+       writeln(ss1_stopAtLine=ok)@\io
+   \else writeln(ss1_stopAtLine=failed)@\io.
+
+?- \if mustStop(CarSS1, DSS1) \then
+       writeln(ss1_mustStop=ok)@\io
+   \else writeln(ss1_mustStop=failed)@\io.
+
+// SS2: Stop sign with crosswalk but no stop line — must stop before crosswalk
+participant(SS2, CarSS2).
+straight(CarSS2, DSS2).
+drive(CarSS2, DSS2).
+stopSign(StopSignSS2).
+controls(StopSignSS2, DSS2).
+crosswalkAt(CW_SS2, DSS2).
+facesIntersection(DSS2, IntSS2).
+stoppedAtSign(CarSS2, DSS2).
+
+?- \if mustStopAt(CarSS2, DSS2, beforeCrosswalk(CW_SS2)) \then
+       writeln(ss2_stopAtCrosswalk=ok)@\io
+   \else writeln(ss2_stopAtCrosswalk=failed)@\io.
+
+// SS3: Stop sign, no stop line, no crosswalk — must stop before intersection
+participant(SS3, CarSS3).
+straight(CarSS3, DSS3).
+drive(CarSS3, DSS3).
+stopSign(StopSignSS3).
+controls(StopSignSS3, DSS3).
+facesIntersection(DSS3, IntSS3).
+stoppedAtSign(CarSS3, DSS3).
+
+?- \if mustStopAt(CarSS3, DSS3, beforeIntersection(IntSS3)) \then
+       writeln(ss3_stopBeforeInt=ok)@\io
+   \else writeln(ss3_stopBeforeInt=failed)@\io.
+
+// SS4: Driver runs stop sign (no stoppedAtSign) — illegal
+participant(SS4, CarSS4).
+straight(CarSS4, DSS4).
+drive(CarSS4, DSS4).
+stopSign(StopSignSS4).
+controls(StopSignSS4, DSS4).
+facesIntersection(DSS4, IntSS4).
+
+?- \if illegalPassStopSign(CarSS4, DSS4) \then
+       writeln(ss4_illegal_nostop=ok)@\io
+   \else writeln(ss4_illegal_nostop=failed)@\io.
+
+?- \if illegalDrive(CarSS4, DSS4) \then
+       writeln(ss4_illegalDrive=ok)@\io
+   \else writeln(ss4_illegalDrive=failed)@\io.
+
+// SS5: After stopping at stop sign, must yield to car already in intersection
+participant(SS5, CarSS5).
+participant(SS5, CarInIntSS5).
+straight(CarSS5, DSS5).
+drive(CarSS5, DSS5).
+stopSign(StopSignSS5).
+controls(StopSignSS5, DSS5).
+facesIntersection(DSS5, IntSS5).
+stoppedAtSign(CarSS5, DSS5).
+straight(CarInIntSS5, DInSS5).
+drive(CarInIntSS5, DInSS5).
+inIntersection(DInSS5, IntSS5).
+
+?- \if mustYield(CarSS5, CarInIntSS5, SS5) \then
+       writeln(ss5_yieldToIntersection=ok)@\io
+   \else writeln(ss5_yieldToIntersection=failed)@\io.
+
+?- \if rightOfWay(SS5, CarInIntSS5) \then
+       writeln(ss5_row=ok)@\io
+   \else writeln(ss5_row=failed)@\io.
+
+
+
+// =======================
+// Yield Sign Tests
+// =======================
+
+// YS1: Driver at yield sign must reduce speed
+participant(YS1, CarYS1).
+straight(CarYS1, DYS1).
+drive(CarYS1, DYS1).
+yieldSign(YieldSignYS1).
+controls(YieldSignYS1, DYS1).
+facesIntersection(DYS1, IntYS1).
+
+?- \if mustReduceSpeed(CarYS1, DYS1) \then
+       writeln(ys1_reduceSpeed=ok)@\io
+   \else writeln(ys1_reduceSpeed=failed)@\io.
+
+// YS2: Yield sign + car in intersection => must yield, car has ROW
+participant(YS2, CarYS2).
+participant(YS2, CarInYS2).
+straight(CarYS2, DYS2).
+drive(CarYS2, DYS2).
+yieldSign(YieldSignYS2).
+controls(YieldSignYS2, DYS2).
+facesIntersection(DYS2, IntYS2).
+straight(CarInYS2, DInYS2).
+drive(CarInYS2, DInYS2).
+inIntersection(DInYS2, IntYS2).
+
+?- \if mustYield(CarYS2, CarInYS2, YS2) \then
+       writeln(ys2_mustYield=ok)@\io
+   \else writeln(ys2_mustYield=failed)@\io.
+
+?- \if rightOfWay(YS2, CarInYS2) \then
+       writeln(ys2_row=ok)@\io
+   \else writeln(ys2_row=failed)@\io.
+
+// YS3: Yield sign + trafficPresent => must come to full stop
+participant(YS3, CarYS3).
+straight(CarYS3, DYS3).
+drive(CarYS3, DYS3).
+yieldSign(YieldSignYS3).
+controls(YieldSignYS3, DYS3).
+facesIntersection(DYS3, IntYS3).
+trafficPresent(DYS3).
+
+?- \if mustStop(CarYS3, DYS3) \then
+       writeln(ys3_mustStop=ok)@\io
+   \else writeln(ys3_mustStop=failed)@\io.
+
+
+
+// =======================
+// Prohibition Sign Tests
+// =======================
+
+// PB1: No right turn sign — making a right turn is illegal
+participant(PB1, CarPB1).
+rightTurn(CarPB1, DPB1).
+drive(CarPB1, DPB1).
+prohibitionSign(NoRightSignPB1, rightTurn).
+controls(NoRightSignPB1, DPB1).
+performsAction(CarPB1, DPB1, rightTurn).
+
+?- \if prohibitedBySign(rightTurn, DPB1) \then
+       writeln(pb1_prohibited=ok)@\io
+   \else writeln(pb1_prohibited=failed)@\io.
+
+?- \if illegalDrive(CarPB1, DPB1) \then
+       writeln(pb1_illegal=ok)@\io
+   \else writeln(pb1_illegal=failed)@\io.
+
+// PB2: Driver not making prohibited action — NOT illegal
+participant(PB2, CarPB2).
+straight(CarPB2, DPB2).
+drive(CarPB2, DPB2).
+prohibitionSign(NoRightSignPB2, rightTurn).
+controls(NoRightSignPB2, DPB2).
+// CarPB2 goes straight — no performsAction(CarPB2, DPB2, rightTurn)
+
+?- \if (\naf illegalDrive(CarPB2, DPB2)) \then
+       writeln(pb2_notIllegal=ok)@\io
+   \else writeln(pb2_notIllegal=failed)@\io.
+
+
+// =======================
+// Warning Sign Tests
+// =======================
+
+// WS1: Yellow diamond sign = warning sign
+yellowDiamond(SignWS1).
+blackLetters(SignWS1).
+
+?- \if warningSign(SignWS1) \then
+       writeln(ws1_warningSign=ok)@\io
+   \else writeln(ws1_warningSign=failed)@\io.
+
+// WS2: Warning sign joined with recommended speed => shouldReduceSpeed
+participant(WS2, CarWS2).
+straight(CarWS2, DWS2).
+drive(CarWS2, DWS2).
+yellowDiamond(SignWS2).
+blackLetters(SignWS2).
+controls(SignWS2, DWS2).
+joinedRecommendedSpeed(SignWS2, 35).
+
+?- \if recommendedSpeedAdvisory(DWS2, 35) \then
+       writeln(ws2_speedAdvisory=ok)@\io
+   \else writeln(ws2_speedAdvisory=failed)@\io.
+
+?- \if shouldReduceSpeed(CarWS2, DWS2) \then
+       writeln(ws2_shouldReduceSpeed=ok)@\io
+   \else writeln(ws2_shouldReduceSpeed=failed)@\io.
+
+
+
+// =======================
+// Work Area Sign Tests
+// =======================
+
+// WZ1: Orange sign + black letters = work area sign, creates work zone
+orangeSign(SignWZ1).
+blackLetters(SignWZ1).
+controls(SignWZ1, DWZ1).
+
+?- \if workAreaSign(SignWZ1) \then
+       writeln(wz1_workAreaSign=ok)@\io
+   \else writeln(wz1_workAreaSign=failed)@\io.
+
+?- \if inWorkZone(DWZ1) \then
+       writeln(wz1_inWorkZone=ok)@\io
+   \else writeln(wz1_inWorkZone=failed)@\io.
+
+// WZ2: Must reduce speed in work zone (no posted limit needed)
+participant(WZ2, CarWZ2).
+straight(CarWZ2, DWZ2).
+drive(CarWZ2, DWZ2).
+orangeSign(SignWZ2).
+blackLetters(SignWZ2).
+controls(SignWZ2, DWZ2).
+
+?- \if mustReduceSpeed(CarWZ2, DWZ2) \then
+       writeln(wz2_mustReduce=ok)@\io
+   \else writeln(wz2_mustReduce=failed)@\io.
+
+// WZ3: Must obey flag person in work zone
+participant(WZ3, CarWZ3).
+straight(CarWZ3, DWZ3).
+drive(CarWZ3, DWZ3).
+orangeSign(SignWZ3).
+blackLetters(SignWZ3).
+controls(SignWZ3, DWZ3).
+flagPersonPresent(DWZ3).
+
+?- \if mustObeyFlagPerson(CarWZ3, DWZ3) \then
+       writeln(wz3_mustObeyFlag=ok)@\io
+   \else writeln(wz3_mustObeyFlag=failed)@\io.
+
+// WZ4: Illegal to exceed posted work zone speed limit
+participant(WZ4, CarWZ4).
+straight(CarWZ4, DWZ4).
+drive(CarWZ4, DWZ4).
+orangeSign(SignWZ4).
+blackLetters(SignWZ4).
+controls(SignWZ4, DWZ4).
+postedWorkZoneLimit(DWZ4, 25).
+drivingSpeed(CarWZ4, DWZ4, 45).
+
+?- \if illegalWorkZoneSpeed(CarWZ4, DWZ4) \then
+       writeln(wz4_speedViolation=ok)@\io
+   \else writeln(wz4_speedViolation=failed)@\io.
+
+?- \if illegalDrive(CarWZ4, DWZ4) \then
+       writeln(wz4_illegalDrive=ok)@\io
+   \else writeln(wz4_illegalDrive=failed)@\io.
+
+// WZ5: Illegal to disobey flag person (not obeysFlager)
+participant(WZ5, CarWZ5).
+straight(CarWZ5, DWZ5).
+drive(CarWZ5, DWZ5).
+orangeSign(SignWZ5).
+blackLetters(SignWZ5).
+controls(SignWZ5, DWZ5).
+flagPersonPresent(DWZ5).
+// CarWZ5 does NOT obey flag person
+
+?- \if illegalDrive(CarWZ5, DWZ5) \then
+       writeln(wz5_disobeyFlag=ok)@\io
+   \else writeln(wz5_disobeyFlag=failed)@\io.
+
+// WZ6: Legal — under speed limit in work zone
+participant(WZ6, CarWZ6).
+straight(CarWZ6, DWZ6).
+drive(CarWZ6, DWZ6).
+orangeSign(SignWZ6).
+blackLetters(SignWZ6).
+controls(SignWZ6, DWZ6).
+postedWorkZoneLimit(DWZ6, 25).
+drivingSpeed(CarWZ6, DWZ6, 20).
+
+?- \if (\naf illegalWorkZoneSpeed(CarWZ6, DWZ6)) \then
+       writeln(wz6_legalSpeed=ok)@\io
+   \else writeln(wz6_legalSpeed=failed)@\io.
+
+
+
+// =======================
+// Route Sign Tests
+// =======================
+
+// RT1: State route sign
+stateRouteSign(SignRT1).
+controls(SignRT1, DRT1).
+
+?- \if routeSign(SignRT1, state) \then
+       writeln(rt1_stateRoute=ok)@\io
+   \else writeln(rt1_stateRoute=failed)@\io.
+
+?- \if onRouteType(DRT1, state) \then
+       writeln(rt1_onRouteType=ok)@\io
+   \else writeln(rt1_onRouteType=failed)@\io.
+
+// RT2: US route sign
+usRouteSign(SignRT2).
+controls(SignRT2, DRT2).
+
+?- \if routeSign(SignRT2, us) \then
+       writeln(rt2_usRoute=ok)@\io
+   \else writeln(rt2_usRoute=failed)@\io.
+
+// RT3: Interstate sign
+interstateRouteSign(SignRT3).
+controls(SignRT3, DRT3).
+
+?- \if routeSign(SignRT3, interstate) \then
+       writeln(rt3_interstate=ok)@\io
+   \else writeln(rt3_interstate=failed)@\io.
+
+// RT4: County route sign
+countyRouteSign(SignRT4).
+controls(SignRT4, DRT4).
+
+?- \if routeSign(SignRT4, county) \then
+       writeln(rt4_county=ok)@\io
+   \else writeln(rt4_county=failed)@\io.
+
+
+
+// =======================
+// Service Sign Tests
+// =======================
+
+// SV1: Blue + white letters = service sign
+blueSign(SignSV1).
+whiteLetters(SignSV1).
+
+?- \if serviceSign(SignSV1) \then
+       writeln(sv1_serviceSign=ok)@\io
+   \else writeln(sv1_serviceSign=failed)@\io.
+
+// SV2: Service sign indicates a gas station nearby
+blueSign(SignSV2).
+whiteLetters(SignSV2).
+controls(SignSV2, DSV2).
+indicatesService(SignSV2, gasStation, ExitSV2).
+
+?- \if nearbyService(DSV2, gasStation, ExitSV2) \then
+       writeln(sv2_nearbyService=ok)@\io
+   \else writeln(sv2_nearbyService=failed)@\io.
+
+
+// =======================
+// Traffic Signal Tests
+// =======================
+
+// TL1: Out-of-service light => mustStopAt
+participant(TL1, CarTL1).
+straight(CarTL1, DTL1).
+approachingIntersection(DTL1, IntTL1).
+trafficLightOutOfService(IntTL1).
+
+?- \if mustStopAt(CarTL1, DTL1) \then
+       writeln(tl1_outOfService=ok)@\io
+   \else writeln(tl1_outOfService=failed)@\io.
+
+// TL2: Directed by officer => no mustStopAt
+participant(TL2, CarTL2).
+straight(CarTL2, DTL2).
+approachingIntersection(DTL2, IntTL2).
+trafficLightOutOfService(IntTL2).
+directedByOfficer(CarTL2, DTL2).
+
+?- \if (\naf mustStopAt(CarTL2, DTL2)) \then
+       writeln(tl2_officerOverride=ok)@\io
+   \else writeln(tl2_officerOverride=failed)@\io.
+
+// TL3: Steady red => mustStop
+participant(TL3, CarTL3).
+straight(CarTL3, DTL3).
+facingSteadyRed(DTL3).
+
+?- \if mustStop(CarTL3, DTL3) \then
+       writeln(tl3_steadyRed=ok)@\io
+   \else writeln(tl3_steadyRed=failed)@\io.
+
+// TL4: Right turn on red — legal (full stop, yielded, no prohibition, not NYC)
+participant(TL4, CarTL4).
+rightTurn(CarTL4, DTL4).
+facingSteadyRed(DTL4).
+fullStop(CarTL4, DTL4).
+yieldedToOncoming(CarTL4, DTL4).
+yieldedToPedestrians(CarTL4, DTL4).
+
+?- \if mayTurnRightOnRed(CarTL4, DTL4) \then
+       writeln(tl4_rightOnRed=ok)@\io
+   \else writeln(tl4_rightOnRed=failed)@\io.
+
+// TL5: Right turn on red — illegal (NO TURN ON RED sign posted)
+participant(TL5, CarTL5).
+rightTurn(CarTL5, DTL5).
+facingSteadyRed(DTL5).
+fullStop(CarTL5, DTL5).
+yieldedToOncoming(CarTL5, DTL5).
+yieldedToPedestrians(CarTL5, DTL5).
+noTurnOnRedSign(DTL5).
+
+?- \if (\naf mayTurnRightOnRed(CarTL5, DTL5)) \then
+       writeln(tl5_noTurnOnRed=ok)@\io
+   \else writeln(tl5_noTurnOnRed=failed)@\io.
+
+?- \if illegalDrive(CarTL5, DTL5) \then
+       writeln(tl5_illegalTurn=ok)@\io
+   \else writeln(tl5_illegalTurn=failed)@\io.
+
+// TL6: School bus with students cannot turn right on red
+participant(TL6, BusTL6).
+rightTurn(BusTL6, DTL6).
+facingSteadyRed(DTL6).
+schoolBusWithStudents(BusTL6).
+
+?- \if (\naf mayTurnRightOnRed(BusTL6, DTL6)) \then
+       writeln(tl6_schoolBusNoRightOnRed=ok)@\io
+   \else writeln(tl6_schoolBusNoRightOnRed=failed)@\io.
+
+// TL7: Right on red in NYC — allowed with permit sign
+participant(TL7, CarTL7).
+rightTurn(CarTL7, DTL7).
+facingSteadyRed(DTL7).
+fullStop(CarTL7, DTL7).
+yieldedToOncoming(CarTL7, DTL7).
+yieldedToPedestrians(CarTL7, DTL7).
+inNYC(DTL7).
+rightOnRedPermittedSign(DTL7).
+
+?- \if mayTurnRightOnRed(CarTL7, DTL7) \then
+       writeln(tl7_nycRightOnRedAllowed=ok)@\io
+   \else writeln(tl7_nycRightOnRedAllowed=failed)@\io.
+
+// TL8: Right on red in NYC — illegal without permit sign
+participant(TL8, CarTL8).
+rightTurn(CarTL8, DTL8).
+facingSteadyRed(DTL8).
+fullStop(CarTL8, DTL8).
+yieldedToOncoming(CarTL8, DTL8).
+yieldedToPedestrians(CarTL8, DTL8).
+inNYC(DTL8).
+// No rightOnRedPermittedSign
+
+?- \if (\naf mayTurnRightOnRed(CarTL8, DTL8)) \then
+       writeln(tl8_nycNoPermit=ok)@\io
+   \else writeln(tl8_nycNoPermit=failed)@\io.
+
+// TL9: Left turn on red — one-way to one-way, legal
+participant(TL9, CarTL9).
+leftTurn(CarTL9, DTL9).
+facingSteadyRed(DTL9).
+fullStop(CarTL9, DTL9).
+yieldedToOncoming(CarTL9, DTL9).
+yieldedToPedestrians(CarTL9, DTL9).
+oneWayRoad(DTL9).
+turnsIntoOneWayRoad(DTL9).
+
+?- \if mayTurnLeftOnRed(CarTL9, DTL9) \then
+       writeln(tl9_leftOnRed=ok)@\io
+   \else writeln(tl9_leftOnRed=failed)@\io.
+
+// TL10: Left turn on red — two-way road, illegal
+participant(TL10, CarTL10).
+leftTurn(CarTL10, DTL10).
+facingSteadyRed(DTL10).
+// NOT oneWayRoad
+
+?- \if (\naf mayTurnLeftOnRed(CarTL10, DTL10)) \then
+       writeln(tl10_leftOnRedTwoWay=ok)@\io
+   \else writeln(tl10_leftOnRedTwoWay=failed)@\io.
+
+// TL11: Flashing red => mustStop and mustYield
+participant(TL11, CarTL11).
+straight(CarTL11, DTL11).
+facingFlashingRed(DTL11).
+
+?- \if mustStop(CarTL11, DTL11) \then
+       writeln(tl11_flashingRedStop=ok)@\io
+   \else writeln(tl11_flashingRedStop=failed)@\io.
+
+?- \if mustYield(CarTL11, DTL11) \then
+       writeln(tl11_flashingRedYield=ok)@\io
+   \else writeln(tl11_flashingRedYield=failed)@\io.
+
+// TL12: Red arrow — illegal to go in arrow direction
+participant(TL12, CarTL12).
+straight(CarTL12, DTL12).
+facingRedArrow(DTL12, right).
+movingInDirection(CarTL12, DTL12, right).
+
+?- \if illegalDrive(CarTL12, DTL12) \then
+       writeln(tl12_redArrow=ok)@\io
+   \else writeln(tl12_redArrow=failed)@\io.
+
+// TL13: Steady yellow => shouldPrepareToStop
+participant(TL13, CarTL13).
+straight(CarTL13, DTL13).
+facingSteadyYellow(DTL13).
+
+?- \if shouldPrepareToStop(CarTL13, DTL13) \then
+       writeln(tl13_steadyYellow=ok)@\io
+   \else writeln(tl13_steadyYellow=failed)@\io.
+
+// TL14: Flashing yellow => mustDriveWithCaution
+participant(TL14, CarTL14).
+straight(CarTL14, DTL14).
+facingFlashingYellow(DTL14).
+
+?- \if mustDriveWithCaution(CarTL14, DTL14) \then
+       writeln(tl14_flashingYellow=ok)@\io
+   \else writeln(tl14_flashingYellow=failed)@\io.
+
+// TL15: Steady green => mayProceed; mustYield if other traffic present
+participant(TL15, CarTL15).
+straight(CarTL15, DTL15).
+facingSteadyGreen(DTL15).
+otherTrafficAtIntersection(DTL15).
+
+?- \if mayProceed(CarTL15, DTL15) \then
+       writeln(tl15_steadyGreen=ok)@\io
+   \else writeln(tl15_steadyGreen=failed)@\io.
+
+?- \if mustYield(CarTL15, DTL15) \then
+       writeln(tl15_greenYield=ok)@\io
+   \else writeln(tl15_greenYield=failed)@\io.
+
+// TL16: Green arrow => mayProceedInDirection
+participant(TL16, CarTL16).
+leftTurn(CarTL16, DTL16).
+facingGreenArrow(DTL16, left).
+
+?- \if mayProceedInDirection(CarTL16, DTL16, left) \then
+       writeln(tl16_greenArrow=ok)@\io
+   \else writeln(tl16_greenArrow=failed)@\io.
+
+
+// =======================
+// Lane Use Control Light Tests
+// =======================
+
+// LC1: Steady red X => illegalDrive
+participant(LC1, CarLC1).
+straight(CarLC1, DLC1).
+laneControlLight(DLC1, steadyRedX).
+
+?- \if illegalDrive(CarLC1, DLC1) \then
+       writeln(lc1_redX=ok)@\io
+   \else writeln(lc1_redX=failed)@\io.
+
+// LC2: Steady yellow X => mustChangeLane
+participant(LC2, CarLC2).
+straight(CarLC2, DLC2).
+laneControlLight(DLC2, steadyYellowX).
+
+?- \if mustChangeLane(CarLC2, DLC2) \then
+       writeln(lc2_yellowX=ok)@\io
+   \else writeln(lc2_yellowX=failed)@\io.
+
+// LC3: Flashing yellow X — going straight is illegal (left turn only)
+participant(LC3, CarLC3).
+straight(CarLC3, DLC3).
+laneControlLight(DLC3, flashingYellowX).
+
+?- \if laneForLeftTurnOnly(DLC3) \then
+       writeln(lc3_flashingYellowX=ok)@\io
+   \else writeln(lc3_flashingYellowX=failed)@\io.
+
+?- \if illegalDrive(CarLC3, DLC3) \then
+       writeln(lc3_notLeftTurn=ok)@\io
+   \else writeln(lc3_notLeftTurn=failed)@\io.
+
+// LC4: Green arrow lane => laneOpen
+laneControlLight(DLC4, greenArrow).
+
+?- \if laneOpen(DLC4) \then
+       writeln(lc4_greenArrow=ok)@\io
+   \else writeln(lc4_greenArrow=failed)@\io.
+
+
+// =======================
+// Pavement Marking Tests
+// =======================
+
+// PM1: Crossing edge line without authorization => illegalDrive
+participant(PM1, CarPM1).
+straight(CarPM1, DPM1).
+crossesEdgeLine(CarPM1, DPM1).
+
+?- \if illegalDrive(CarPM1, DPM1) \then
+       writeln(pm1_edgeLine=ok)@\io
+   \else writeln(pm1_edgeLine=failed)@\io.
+
+// PM2: Crossing edge line when directed by officer => NOT illegal
+participant(PM2, CarPM2).
+straight(CarPM2, DPM2).
+crossesEdgeLine(CarPM2, DPM2).
+directedByOfficer(CarPM2, DPM2).
+
+?- \if (\naf illegalDrive(CarPM2, DPM2)) \then
+       writeln(pm2_edgeLineOfficer=ok)@\io
+   \else writeln(pm2_edgeLineOfficer=failed)@\io.
+
+// PM3: Broken lane line => may pass if safe
+participant(PM3, CarPM3).
+straight(CarPM3, DPM3).
+brokenLaneLine(DPM3).
+safe(CarPM3, DPM3).
+
+?- \if mayPass(CarPM3, DPM3) \then
+       writeln(pm3_brokenLine=ok)@\io
+   \else writeln(pm3_brokenLine=failed)@\io.
+
+// PM4: On solid side of line — cannot pass (no driveway turn)
+participant(PM4, CarPM4).
+straight(CarPM4, DPM4).
+solidSideOfLine(CarPM4, DPM4).
+
+?- \if illegalPass(CarPM4, DPM4) \then
+       writeln(pm4_solidSide=ok)@\io
+   \else writeln(pm4_solidSide=failed)@\io.
+
+// PM5: On solid side making left turn into driveway => allowed
+participant(PM5, CarPM5).
+leftTurn(CarPM5, DPM5).
+solidSideOfLine(CarPM5, DPM5).
+leftTurnIntoDriveway(CarPM5, DPM5).
+
+?- \if (\naf illegalPass(CarPM5, DPM5)) \then
+       writeln(pm5_solidSideDriveway=ok)@\io
+   \else writeln(pm5_solidSideDriveway=failed)@\io.
+
+// PM6: Double solid lines — cannot pass
+participant(PM6, CarPM6).
+straight(CarPM6, DPM6).
+doubleSolidLines(DPM6).
+
+?- \if illegalPass(CarPM6, DPM6) \then
+       writeln(pm6_doubleSolid=ok)@\io
+   \else writeln(pm6_doubleSolid=failed)@\io.
+
+// PM7: Double solid lines — left turn to enter highway allowed
+participant(PM7, CarPM7).
+leftTurn(CarPM7, DPM7).
+doubleSolidLines(DPM7).
+leftTurnAcrossDoubleSolid(CarPM7, DPM7).
+
+?- \if (\naf illegalPass(CarPM7, DPM7)) \then
+       writeln(pm7_doubleSolidException=ok)@\io
+   \else writeln(pm7_doubleSolidException=failed)@\io.
+
+// PM8: Single solid line — may pass only if obstruction present
+participant(PM8, CarPM8).
+straight(CarPM8, DPM8).
+singleSolidLine(DPM8).
+obstructionInRoad(DPM8).
+
+?- \if mayPass(CarPM8, DPM8) \then
+       writeln(pm8_singleSolidObstruction=ok)@\io
+   \else writeln(pm8_singleSolidObstruction=failed)@\io.
+
+// PM9: Diamond lane — illegal without meeting requirements
+participant(PM9, CarPM9).
+straight(CarPM9, DPM9).
+diamondSymbol(DPM9).
+
+?- \if reservedLane(DPM9) \then
+       writeln(pm9_diamondReserved=ok)@\io
+   \else writeln(pm9_diamondReserved=failed)@\io.
+
+?- \if illegalDrive(CarPM9, DPM9) \then
+       writeln(pm9_diamondIllegal=ok)@\io
+   \else writeln(pm9_diamondIllegal=failed)@\io.
+
+// PM10: HOV vehicle meets requirements — legal in diamond lane
+participant(PM10, HovPM10).
+straight(HovPM10, DPM10).
+diamondSymbol(DPM10).
+meetsLaneRequirements(HovPM10, DPM10).
+
+?- \if (\naf illegalDrive(HovPM10, DPM10)) \then
+       writeln(pm10_hovLegal=ok)@\io
+   \else writeln(pm10_hovLegal=failed)@\io.
+
+// PM11: Stop line — must stop before it when mustStop applies
+participant(PM11, CarPM11).
+straight(CarPM11, DPM11).
+facingSteadyRed(DPM11).
+stopLine(DPM11).
+
+?- \if mustStopBeforeStopLine(CarPM11, DPM11) \then
+       writeln(pm11_stopLine=ok)@\io
+   \else writeln(pm11_stopLine=failed)@\io.
+
+
+// =======================
+// Traffic Officer Tests
+// =======================
+
+// TO1: Police officer is an authorized traffic director
+policeOfficer(OfficerTO1).
+
+?- \if authorizedTrafficDirector(OfficerTO1) \then
+       writeln(to1_policeAuthorized=ok)@\io
+   \else writeln(to1_policeAuthorized=failed)@\io.
+
+// TO2: Fire police is an authorized traffic director
+firePolice(FireTO2).
+
+?- \if authorizedTrafficDirector(FireTO2) \then
+       writeln(to2_firePoliceAuthorized=ok)@\io
+   \else writeln(to2_firePoliceAuthorized=failed)@\io.
+
+// TO3: Highway flag person is authorized
+highwayFlagPerson(FlagTO3).
+
+?- \if authorizedTrafficDirector(FlagTO3) \then
+       writeln(to3_flagPersonAuthorized=ok)@\io
+   \else writeln(to3_flagPersonAuthorized=failed)@\io.
+
+// TO4: School crossing person is authorized
+schoolCrossingPerson(CrossTO4).
+
+?- \if authorizedTrafficDirector(CrossTO4) \then
+       writeln(to4_crossingPersonAuthorized=ok)@\io
+   \else writeln(to4_crossingPersonAuthorized=failed)@\io.
+
+// TO5: School bus driver is authorized
+schoolBusDriver(BusDriverTO5).
+
+?- \if authorizedTrafficDirector(BusDriverTO5) \then
+       writeln(to5_schoolBusDriverAuthorized=ok)@\io
+   \else writeln(to5_schoolBusDriverAuthorized=failed)@\io.
+
+// TO6: Officer directs stop at green light => mustStop fires
+participant(TO6, CarTO6).
+straight(CarTO6, DTO6).
+facingSteadyGreen(DTO6).
+policeOfficer(OfficerTO6).
+officerDirectsStop(OfficerTO6, CarTO6, DTO6).
+
+// mayProceed would normally apply due to green light
+?- \if mayProceed(CarTO6, DTO6) \then
+       writeln(to6_greenMayProceed=ok)@\io
+   \else writeln(to6_greenMayProceed=failed)@\io.
+
+// But officer stop overrides it
+?- \if mustStop(CarTO6, DTO6) \then
+       writeln(to6_officerStopOverridesGreen=ok)@\io
+   \else writeln(to6_officerStopOverridesGreen=failed)@\io.
+
+// TO7: Officer directs proceed at red light => mayProceed fires
+participant(TO7, CarTO7).
+straight(CarTO7, DTO7).
+facingSteadyRed(DTO7).
+policeOfficer(OfficerTO7).
+officerDirectsProceed(OfficerTO7, CarTO7, DTO7).
+
+// mustStop would normally apply due to red light
+?- \if mustStop(CarTO7, DTO7) \then
+       writeln(to7_redMustStop=ok)@\io
+   \else writeln(to7_redMustStop=failed)@\io.
+
+// But officer proceed overrides it
+?- \if mayProceed(CarTO7, DTO7) \then
+       writeln(to7_officerProceedOverridesRed=ok)@\io
+   \else writeln(to7_officerProceedOverridesRed=failed)@\io.
+
+// TO8: directedByOfficer inferred from officerDirects fact
+participant(TO8, CarTO8).
+straight(CarTO8, DTO8).
+policeOfficer(OfficerTO8).
+officerDirects(OfficerTO8, CarTO8, DTO8).
+
+?- \if directedByOfficer(CarTO8, DTO8) \then
+       writeln(to8_directedByOfficer=ok)@\io
+   \else writeln(to8_directedByOfficer=failed)@\io.
+
+// TO9: Out-of-service light + directed by officer => no mustStopAt (officer takes over)
+participant(TO9, CarTO9).
+straight(CarTO9, DTO9).
+approachingIntersection(DTO9, IntTO9).
+trafficLightOutOfService(IntTO9).
+policeOfficer(OfficerTO9).
+officerDirects(OfficerTO9, CarTO9, DTO9).
+
+?- \if (\naf mustStopAt(CarTO9, DTO9)) \then
+       writeln(to9_officerOverridesOutage=ok)@\io
+   \else writeln(to9_officerOverridesOutage=failed)@\io.
+
+
+// =======================
+// Chapter 6: Passing Tests
+// =======================
+
+// SP1: Exceeding speed limit while passing => illegalDrive
+participant(SP1, CarSP1).
+straight(CarSP1, DSP1).
+passingVehicle(CarSP1, DSP1).
+drivingSpeed(CarSP1, DSP1, 70).
+speedLimit(DSP1, 55).
+
+?- \if illegalDrive(CarSP1, DSP1) \then
+       writeln(sp1_speedLimitPass=ok)@\io
+   \else writeln(sp1_speedLimitPass=failed)@\io.
+
+// SP2: At or under speed limit while passing => NOT illegalDrive (for that rule)
+participant(SP2, CarSP2).
+straight(CarSP2, DSP2).
+passingVehicle(CarSP2, DSP2).
+drivingSpeed(CarSP2, DSP2, 55).
+speedLimit(DSP2, 55).
+
+?- \if (\naf illegalDrive(CarSP2, DSP2)) \then
+       writeln(sp2_legalSpeed=ok)@\io
+   \else writeln(sp2_legalSpeed=failed)@\io.
+
+// MC1: Passing motorcycle => mustGiveFullLaneWidth
+participant(MC1, CarMC1).
+straight(CarMC1, DMC1).
+motorcycle(MotoMC1).
+passing(CarMC1, DMC1, MotoMC1).
+
+?- \if mustGiveFullLaneWidth(CarMC1, DMC1, MotoMC1) \then
+       writeln(mc1_fullLaneWidth=ok)@\io
+   \else writeln(mc1_fullLaneWidth=failed)@\io.
+
+// MC2: Sharing lane space with motorcycle => illegalDrive
+participant(MC2, CarMC2).
+straight(CarMC2, DMC2).
+motorcycle(MotoMC2).
+sharesLaneSpaceWith(CarMC2, DMC2, MotoMC2).
+
+?- \if illegalDrive(CarMC2, DMC2) \then
+       writeln(mc2_shareLane=ok)@\io
+   \else writeln(mc2_shareLane=failed)@\io.
+
+// BC1: Overtaking bicycle from behind => mustPassOnLeft
+participant(BC1, CarBC1).
+straight(CarBC1, DBC1).
+bicycle(BikeBC1).
+overtakingFromBehind(CarBC1, DBC1, BikeBC1).
+
+?- \if mustPassOnLeft(CarBC1, DBC1) \then
+       writeln(bc1_bikeMustPassLeft=ok)@\io
+   \else writeln(bc1_bikeMustPassLeft=failed)@\io.
+
+// BC2: Overtaking bicycle without passing on left => illegalDrive
+participant(BC2, CarBC2).
+straight(CarBC2, DBC2).
+bicycle(BikeBC2).
+overtakingFromBehind(CarBC2, DBC2, BikeBC2).
+// CarBC2 does NOT passesOnLeft
+
+?- \if illegalDrive(CarBC2, DBC2) \then
+       writeln(bc2_bikeNoLeftPass=ok)@\io
+   \else writeln(bc2_bikeNoLeftPass=failed)@\io.
+
+// TS1: Changing lanes => mustSignalLaneChange
+participant(TS1, CarTS1).
+straight(CarTS1, DTS1).
+changingLanes(CarTS1, DTS1).
+
+?- \if mustSignalLaneChange(CarTS1, DTS1) \then
+       writeln(ts1_mustSignal=ok)@\io
+   \else writeln(ts1_mustSignal=failed)@\io.
+
+// TS2: Changing lanes without 100-foot signal => illegalLaneChange
+participant(TS2, CarTS2).
+straight(CarTS2, DTS2).
+changingLanes(CarTS2, DTS2).
+// No signaledAtLeast100Feet
+
+?- \if illegalLaneChange(CarTS2, DTS2) \then
+       writeln(ts2_noSignal=ok)@\io
+   \else writeln(ts2_noSignal=failed)@\io.
+
+// TS3: Signaled 100 feet before => NOT illegalLaneChange
+participant(TS3, CarTS3).
+straight(CarTS3, DTS3).
+changingLanes(CarTS3, DTS3).
+signaledAtLeast100Feet(CarTS3, DTS3).
+
+?- \if (\naf illegalLaneChange(CarTS3, DTS3)) \then
+       writeln(ts3_signalOk=ok)@\io
+   \else writeln(ts3_signalOk=failed)@\io.
+
+// CW1: Passing vehicle stopped at crosswalk for pedestrian => illegalPass
+participant(CW1, CarCW1).
+straight(CarCW1, DCW1).
+vehicleStoppedAtCrosswalkForPedestrian(DCW1).
+
+?- \if illegalPass(CarCW1, DCW1) \then
+       writeln(cw1_crosswalkPass=ok)@\io
+   \else writeln(cw1_crosswalkPass=failed)@\io.
+
+// LP1: Solid yellow center line => illegalPassOnLeft
+participant(LP1, CarLP1).
+straight(CarLP1, DLP1).
+solidYellowCenterLine(DLP1).
+
+?- \if illegalPassOnLeft(CarLP1, DLP1) \then
+       writeln(lp1_solidYellow=ok)@\io
+   \else writeln(lp1_solidYellow=failed)@\io.
+
+// LP2: Oncoming vehicle within 200 feet => illegalPassOnLeft
+participant(LP2, CarLP2).
+straight(CarLP2, DLP2).
+oncomingVehicleWithin200Feet(DLP2).
+
+?- \if illegalPassOnLeft(CarLP2, DLP2) \then
+       writeln(lp2_oncoming200=ok)@\io
+   \else writeln(lp2_oncoming200=failed)@\io.
+
+// LP3: Approaching curve/hill on two-way, cannot see over => illegalPassOnLeft
+participant(LP3, CarLP3).
+straight(CarLP3, DLP3).
+approachingCurveOrHillCrest(DLP3).
+twoWayRoad(DLP3).
+// No canSeeAroundOrOver
+
+?- \if illegalPassOnLeft(CarLP3, DLP3) \then
+       writeln(lp3_curveHill=ok)@\io
+   \else writeln(lp3_curveHill=failed)@\io.
+
+// LP4: Within 100 feet of railroad crossing on two-way => illegalPassOnLeft
+participant(LP4, CarLP4).
+straight(CarLP4, DLP4).
+within100FeetOfRailroadCrossing(DLP4).
+twoWayRoad(DLP4).
+
+?- \if illegalPassOnLeft(CarLP4, DLP4) \then
+       writeln(lp4_railroad=ok)@\io
+   \else writeln(lp4_railroad=failed)@\io.
+
+// LP5: Within 100 feet of bridge/tunnel, two-way, obstructed view => illegalPassOnLeft
+participant(LP5, CarLP5).
+straight(CarLP5, DLP5).
+within100FeetOfBridgeTunnelViaduct(DLP5).
+twoWayRoad(DLP5).
+obstructedView(DLP5).
+
+?- \if illegalPassOnLeft(CarLP5, DLP5) \then
+       writeln(lp5_bridgeTunnel=ok)@\io
+   \else writeln(lp5_bridgeTunnel=failed)@\io.
+
+// LP6: Would interfere with oncoming traffic => illegalPassOnLeft
+participant(LP6, CarLP6).
+straight(CarLP6, DLP6).
+interfereWithOncomingTraffic(DLP6).
+
+?- \if illegalPassOnLeft(CarLP6, DLP6) \then
+       writeln(lp6_interfere=ok)@\io
+   \else writeln(lp6_interfere=failed)@\io.
+
+// RP1: Vehicle ahead turning left => mayPassOnRight
+participant(RP1, CarRP1).
+straight(CarRP1, DRP1).
+vehicleAheadTurningLeft(DRP1).
+safe(CarRP1, DRP1).
+
+?- \if mayPassOnRight(CarRP1, DRP1) \then
+       writeln(rp1_leftTurnAhead=ok)@\io
+   \else writeln(rp1_leftTurnAhead=failed)@\io.
+
+// RP2: Two-way multilane road, not prohibited => mayPassOnRight
+participant(RP2, CarRP2).
+straight(CarRP2, DRP2).
+twoWayRoad(DRP2).
+multiLaneEachDirection(DRP2).
+safe(CarRP2, DRP2).
+
+?- \if mayPassOnRight(CarRP2, DRP2) \then
+       writeln(rp2_twoWayMultiLane=ok)@\io
+   \else writeln(rp2_twoWayMultiLane=failed)@\io.
+
+// RP3: One-way multilane road => mayPassOnRight
+participant(RP3, CarRP3).
+straight(CarRP3, DRP3).
+oneWayRoad(DRP3).
+multiLaneRoad(DRP3).
+safe(CarRP3, DRP3).
+
+?- \if mayPassOnRight(CarRP3, DRP3) \then
+       writeln(rp3_oneWayMultiLane=ok)@\io
+   \else writeln(rp3_oneWayMultiLane=failed)@\io.
+
+// RP4: Driving on shoulder without authorization => illegalDrive
+participant(RP4, CarRP4).
+straight(CarRP4, DRP4).
+drivesOnShoulder(CarRP4, DRP4).
+
+?- \if illegalDrive(CarRP4, DRP4) \then
+       writeln(rp4_shoulderIllegal=ok)@\io
+   \else writeln(rp4_shoulderIllegal=failed)@\io.
+
+// BP1: Being passed on left => shouldDecreaseSpeed
+participant(BP1, CarBP1).
+straight(CarBP1, DBP1).
+beingPassedOnLeft(CarBP1, DBP1).
+
+?- \if shouldDecreaseSpeed(CarBP1, DBP1) \then
+       writeln(bp1_decreaseSpeed=ok)@\io
+   \else writeln(bp1_decreaseSpeed=failed)@\io.
+
+// BP2: Frequently passed on right => shouldMoveToRightLane
+participant(BP2, CarBP2).
+straight(CarBP2, DBP2).
+frequentlyPassedOnRight(CarBP2, DBP2).
+
+?- \if shouldMoveToRightLane(CarBP2, DBP2) \then
+       writeln(bp2_moveRight=ok)@\io
+   \else writeln(bp2_moveRight=failed)@\io.
+
+// SB1: Vehicle with sign, red lights on top, yellow-orange => schoolBus
+hasSchoolBusSign(BusSB1).
+hasRedLightsOnTop(BusSB1).
+yellowOrangeColor(BusSB1).
+
+?- \if schoolBus(BusSB1) \then
+       writeln(sb1_schoolBusId=ok)@\io
+   \else writeln(sb1_schoolBusId=failed)@\io.
+
+// SB2: Disability transport vehicle equipped as school bus => schoolBus
+disabilityTransportVehicle(BusSB2).
+equippedAsSchoolBus(BusSB2).
+
+?- \if schoolBus(BusSB2) \then
+       writeln(sb2_disabilityBus=ok)@\io
+   \else writeln(sb2_disabilityBus=failed)@\io.
+
+// SB3: School bus flashing yellow => shouldDecreaseSpeed and shouldPrepareToStop
+participant(SB3, CarSB3).
+straight(CarSB3, DSB3).
+hasSchoolBusSign(BusSB3).
+hasRedLightsOnTop(BusSB3).
+yellowOrangeColor(BusSB3).
+nearSchoolBus(DSB3, BusSB3).
+schoolBusFlashingYellow(BusSB3).
+
+?- \if shouldDecreaseSpeed(CarSB3, DSB3) \then
+       writeln(sb3_yellowDecrease=ok)@\io
+   \else writeln(sb3_yellowDecrease=failed)@\io.
+
+?- \if shouldPrepareToStop(CarSB3, DSB3) \then
+       writeln(sb3_yellowPrepStop=ok)@\io
+   \else writeln(sb3_yellowPrepStop=failed)@\io.
+
+// SB4: School bus flashing red, stopped => mustStopForSchoolBus and mustStop
+participant(SB4, CarSB4).
+straight(CarSB4, DSB4).
+hasSchoolBusSign(BusSB4).
+hasRedLightsOnTop(BusSB4).
+yellowOrangeColor(BusSB4).
+nearSchoolBus(DSB4, BusSB4).
+schoolBusFlashingRed(BusSB4).
+schoolBusStopped(BusSB4).
+
+?- \if mustStopForSchoolBus(CarSB4, DSB4) \then
+       writeln(sb4_mustStopForBus=ok)@\io
+   \else writeln(sb4_mustStopForBus=failed)@\io.
+
+?- \if mustStop(CarSB4, DSB4) \then
+       writeln(sb4_mustStop=ok)@\io
+   \else writeln(sb4_mustStop=failed)@\io.
+
+?- \if mustStopAtLeast20FeetFromBus(CarSB4, DSB4) \then
+       writeln(sb4_20feet=ok)@\io
+   \else writeln(sb4_20feet=failed)@\io.
+
+// SB5: Not stopped for bus with red lights => illegalDrive
+participant(SB5, CarSB5).
+straight(CarSB5, DSB5).
+hasSchoolBusSign(BusSB5).
+hasRedLightsOnTop(BusSB5).
+yellowOrangeColor(BusSB5).
+nearSchoolBus(DSB5, BusSB5).
+schoolBusFlashingRed(BusSB5).
+schoolBusStopped(BusSB5).
+// CarSB5 does NOT stoppedForBus
+
+?- \if illegalDrive(CarSB5, DSB5) \then
+       writeln(sb5_illegalPassBus=ok)@\io
+   \else writeln(sb5_illegalPassBus=failed)@\io.
+
+// SB6: May proceed when bus starts moving
+participant(SB6, CarSB6).
+straight(CarSB6, DSB6).
+hasSchoolBusSign(BusSB6).
+hasRedLightsOnTop(BusSB6).
+yellowOrangeColor(BusSB6).
+nearSchoolBus(DSB6, BusSB6).
+schoolBusFlashingRed(BusSB6).
+schoolBusStopped(BusSB6).
+schoolBusMoving(DSB6).
+
+?- \if mayProceedPastBus(CarSB6, DSB6) \then
+       writeln(sb6_proceedWhenMoves=ok)@\io
+   \else writeln(sb6_proceedWhenMoves=failed)@\io.
+
+
+// =======================
+// Chapter 7: Parking Tests
+// =======================
+
+// PK1: Stopped with no load/unload = parking
+vehicleStopped(CarPK1, LocPK1).
+
+?- \if parking(CarPK1, LocPK1) \then
+       writeln(pk1_parkingDef=ok)@\io
+   \else writeln(pk1_parkingDef=failed)@\io.
+
+// PK2: Stopped for load/unload = not parking
+vehicleStopped(CarPK2, LocPK2).
+temporaryLoadUnload(CarPK2, LocPK2).
+
+?- \if (\naf parking(CarPK2, LocPK2)) \then
+       writeln(pk2_notParking=ok)@\io
+   \else writeln(pk2_notParking=failed)@\io.
+
+// PK3: Standing = stopped for receiving/discharging passengers
+vehicleStopped(CarPK3, LocPK3).
+receivingOrDischargingPassengers(CarPK3, LocPK3).
+
+?- \if standing(CarPK3, LocPK3) \then
+       writeln(pk3_standing=ok)@\io
+   \else writeln(pk3_standing=failed)@\io.
+
+// PK4: NO PARKING sign — may stop for load/unload
+noParkingSign(LocPK4).
+temporaryLoadUnload(CarPK4, LocPK4).
+
+?- \if mayStop(CarPK4, LocPK4) \then
+       writeln(pk4_noParkingLoadOk=ok)@\io
+   \else writeln(pk4_noParkingLoadOk=failed)@\io.
+
+// PK5: NO STANDING sign — may stop for discharging passengers
+noStandingSign(LocPK5).
+dischargingPassengers(CarPK5, LocPK5).
+
+?- \if mayStop(CarPK5, LocPK5) \then
+       writeln(pk5_noStandingDischarge=ok)@\io
+   \else writeln(pk5_noStandingDischarge=failed)@\io.
+
+// PK6: NO STANDING sign — driver exits vehicle = illegalDrive
+noStandingSign(LocPK6).
+vehicleStopped(CarPK6, LocPK6).
+driverExitedVehicle(CarPK6, LocPK6).
+
+?- \if illegalDrive(CarPK6, LocPK6) \then
+       writeln(pk6_noStandingExit=ok)@\io
+   \else writeln(pk6_noStandingExit=failed)@\io.
+
+// PK7: NO STOPPING sign — allowed if obeying a signal
+noStoppingSign(LocPK7).
+obeyingSignOrSignal(CarPK7, LocPK7).
+
+?- \if mayStop(CarPK7, LocPK7) \then
+       writeln(pk7_noStoppingSignal=ok)@\io
+   \else writeln(pk7_noStoppingSignal=failed)@\io.
+
+// PK8: Within 14 feet of fire hydrant, no driver in vehicle = illegalParkStopStand
+vehicleStopped(CarPK8, LocPK8).
+withinFeetOfFireHydrant(LocPK8, 14).
+
+?- \if illegalParkStopStand(CarPK8, LocPK8) \then
+       writeln(pk8_fireHydrant=ok)@\io
+   \else writeln(pk8_fireHydrant=failed)@\io.
+
+// PK9: Within 14 feet of fire hydrant but licensed driver stays = NOT illegal
+vehicleStopped(CarPK9, LocPK9).
+withinFeetOfFireHydrant(LocPK9, 14).
+licensedDriverRemainsInVehicle(CarPK9, LocPK9).
+
+?- \if (\naf illegalParkStopStand(CarPK9, LocPK9)) \then
+       writeln(pk9_hydrantDriverStays=ok)@\io
+   \else writeln(pk9_hydrantDriverStays=failed)@\io.
+
+// PK10: Double parking = illegalParkStopStand
+vehicleStopped(CarPK10, LocPK10).
+doubleParked(CarPK10, LocPK10).
+
+?- \if illegalParkStopStand(CarPK10, LocPK10) \then
+       writeln(pk10_doubleParked=ok)@\io
+   \else writeln(pk10_doubleParked=failed)@\io.
+
+// PK11: On sidewalk = illegalParkStopStand
+vehicleStopped(CarPK11, LocPK11).
+onSidewalk(LocPK11).
+
+?- \if illegalParkStopStand(CarPK11, LocPK11) \then
+       writeln(pk11_sidewalk=ok)@\io
+   \else writeln(pk11_sidewalk=failed)@\io.
+
+// PK12: In crosswalk = illegalParkStopStand
+vehicleStopped(CarPK12, LocPK12).
+inCrossWalk(LocPK12).
+
+?- \if illegalParkStopStand(CarPK12, LocPK12) \then
+       writeln(pk12_crosswalk=ok)@\io
+   \else writeln(pk12_crosswalk=failed)@\io.
+
+// PK13: In intersection without permit = illegalParkStopStand
+vehicleStopped(CarPK13, LocPK13).
+inIntersectionLoc(LocPK13).
+
+?- \if illegalParkStopStand(CarPK13, LocPK13) \then
+       writeln(pk13_intersection=ok)@\io
+   \else writeln(pk13_intersection=failed)@\io.
+
+// PK14: In intersection with parking meter = NOT illegal
+vehicleStopped(CarPK14, LocPK14).
+inIntersectionLoc(LocPK14).
+permittedBySignOrMeter(LocPK14).
+
+?- \if (\naf illegalParkStopStand(CarPK14, LocPK14)) \then
+       writeln(pk14_intersectionMeter=ok)@\io
+   \else writeln(pk14_intersectionMeter=failed)@\io.
+
+// PK15: On railroad tracks = illegalParkStopStand
+vehicleStopped(CarPK15, LocPK15).
+onRailroadTracks(LocPK15).
+
+?- \if illegalParkStopStand(CarPK15, LocPK15) \then
+       writeln(pk15_railroadTracks=ok)@\io
+   \else writeln(pk15_railroadTracks=failed)@\io.
+
+// PK16: Next to road work, blocks traffic = illegalParkStopStand
+vehicleStopped(CarPK16, LocPK16).
+nextToRoadWork(LocPK16).
+blocksTraffic(CarPK16, LocPK16).
+
+?- \if illegalParkStopStand(CarPK16, LocPK16) \then
+       writeln(pk16_roadWork=ok)@\io
+   \else writeln(pk16_roadWork=failed)@\io.
+
+// PK17: Within 29 feet of pedestrian safety area = illegalParkStopStand
+vehicleStopped(CarPK17, LocPK17).
+withinFeetOfPedestrianSafetyArea(LocPK17, 29).
+
+?- \if illegalParkStopStand(CarPK17, LocPK17) \then
+       writeln(pk17_pedSafetyArea=ok)@\io
+   \else writeln(pk17_pedSafetyArea=failed)@\io.
+
+// PK18: On a bridge = illegalParkStopStand
+vehicleStopped(CarPK18, LocPK18).
+onBridge(LocPK18).
+
+?- \if illegalParkStopStand(CarPK18, LocPK18) \then
+       writeln(pk18_bridge=ok)@\io
+   \else writeln(pk18_bridge=failed)@\io.
+
+// PK19: In a tunnel = illegalParkStopStand
+vehicleStopped(CarPK19, LocPK19).
+inTunnel(LocPK19).
+
+?- \if illegalParkStopStand(CarPK19, LocPK19) \then
+       writeln(pk19_tunnel=ok)@\io
+   \else writeln(pk19_tunnel=failed)@\io.
+
+// PK20: In front of driveway = illegalParkOrStand
+vehicleStopped(CarPK20, LocPK20).
+inFrontOfDriveway(LocPK20).
+
+?- \if illegalParkOrStand(CarPK20, LocPK20) \then
+       writeln(pk20_driveway=ok)@\io
+   \else writeln(pk20_driveway=failed)@\io.
+
+// PK21: Within 19 feet of crosswalk at intersection = illegalParkOrStand
+vehicleStopped(CarPK21, LocPK21).
+withinFeetOfCrosswalkAtIntersection(LocPK21, 19).
+
+?- \if illegalParkOrStand(CarPK21, LocPK21) \then
+       writeln(pk21_crosswalkDist=ok)@\io
+   \else writeln(pk21_crosswalkDist=failed)@\io.
+
+// PK22: Within 29 feet of traffic light = illegalParkOrStand
+vehicleStopped(CarPK22, LocPK22).
+withinFeetOfTrafficControl(LocPK22, 29).
+
+?- \if illegalParkOrStand(CarPK22, LocPK22) \then
+       writeln(pk22_trafficControl=ok)@\io
+   \else writeln(pk22_trafficControl=failed)@\io.
+
+// PK23: Within 19 feet of fire station driveway = illegalParkOrStand
+vehicleStopped(CarPK23, LocPK23).
+withinFeetOfFireStationDriveway(LocPK23, 19).
+
+?- \if illegalParkOrStand(CarPK23, LocPK23) \then
+       writeln(pk23_fireStation=ok)@\io
+   \else writeln(pk23_fireStation=failed)@\io.
+
+// PK24: Within 74 feet on opposite side of fire station driveway = illegalParkOrStand
+vehicleStopped(CarPK24, LocPK24).
+oppositeFireStationDriveway(LocPK24).
+withinFeetOfFireStationOpposite(LocPK24, 74).
+
+?- \if illegalParkOrStand(CarPK24, LocPK24) \then
+       writeln(pk24_fireStationOpposite=ok)@\io
+   \else writeln(pk24_fireStationOpposite=failed)@\io.
+
+// PK25: Accessibility curb = illegalParkOrStand
+vehicleStopped(CarPK25, LocPK25).
+accessibilityCurb(LocPK25).
+
+?- \if illegalParkOrStand(CarPK25, LocPK25) \then
+       writeln(pk25_accessCurb=ok)@\io
+   \else writeln(pk25_accessCurb=failed)@\io.
+
+// PK26: Within 49 feet of railroad crossing = illegalPark
+vehicleStopped(CarPK26, LocPK26).
+withinFeetOfRailroadCrossing(LocPK26, 49).
+
+?- \if illegalPark(CarPK26, LocPK26) \then
+       writeln(pk26_railroadCrossing=ok)@\io
+   \else writeln(pk26_railroadCrossing=failed)@\io.
+
+// PK27: Hill parking — must set brake, turn wheels
+vehicleStopped(CarPK27, LocPK27).
+onHill(LocPK27).
+
+?- \if mustSetParkingBrake(CarPK27, LocPK27) \then
+       writeln(pk27_hillBrake=ok)@\io
+   \else writeln(pk27_hillBrake=failed)@\io.
+
+?- \if mustTurnWheelsTowardCurb(CarPK27, LocPK27) \then
+       writeln(pk27_hillWheels=ok)@\io
+   \else writeln(pk27_hillWheels=failed)@\io.
+
+// PK28: Hill parking with automatic transmission => mustEngagePark
+vehicleStopped(CarPK28, LocPK28).
+onHill(LocPK28).
+automaticTransmission(CarPK28).
+
+?- \if mustEngagePark(CarPK28, LocPK28) \then
+       writeln(pk28_autoTransmission=ok)@\io
+   \else writeln(pk28_autoTransmission=failed)@\io.
+
+// PK29: Hill parking with manual transmission => mustEngageFirstGear
+vehicleStopped(CarPK29, LocPK29).
+onHill(LocPK29).
+manualTransmission(CarPK29).
+
+?- \if mustEngageFirstGear(CarPK29, LocPK29) \then
+       writeln(pk29_manualTransmission=ok)@\io
+   \else writeln(pk29_manualTransmission=failed)@\io.
+
+// PK30: Opening road-side door interfering with traffic = illegalDrive
+opensDoorOnRoadSide(CarPK30, LocPK30).
+interferesBicyclistsOrTraffic(CarPK30, LocPK30).
+
+?- \if illegalDrive(CarPK30, LocPK30) \then
+       writeln(pk30_doorRule=ok)@\io
+   \else writeln(pk30_doorRule=failed)@\io.
+
+// PK31: Disabled space without permit = illegalDrive
+vehicleStopped(CarPK31, LocPK31).
+reservedDisabledParking(LocPK31).
+
+?- \if illegalDrive(CarPK31, LocPK31) \then
+       writeln(pk31_noPermit=ok)@\io
+   \else writeln(pk31_noPermit=failed)@\io.
+
+// PK32: Disabled space with permit but disabled person not in vehicle = illegalDrive
+vehicleStopped(CarPK32, LocPK32).
+reservedDisabledParking(LocPK32).
+hasDisabilityPermitOrPlates(CarPK32).
+
+?- \if illegalDrive(CarPK32, LocPK32) \then
+       writeln(pk32_permitNoDisabled=ok)@\io
+   \else writeln(pk32_permitNoDisabled=failed)@\io.
+
+// PK33: Disabled space with valid permit and disabled person present = legal
+vehicleStopped(CarPK33, LocPK33).
+reservedDisabledParking(LocPK33).
+hasDisabilityPermitOrPlates(CarPK33).
+disabledPersonInVehicle(CarPK33).
+
+?- \if mayParkInDisabledSpace(CarPK33, LocPK33) \then
+       writeln(pk33_disabledLegal=ok)@\io
+   \else writeln(pk33_disabledLegal=failed)@\io.
+
+// PK34: Diagonal striped access space = illegalDrive
+vehicleStopped(CarPK34, LocPK34).
+diagonalStripedDisabilityAccessSpace(LocPK34).
+
+?- \if illegalDrive(CarPK34, LocPK34) \then
+       writeln(pk34_diagonalStripes=ok)@\io
+   \else writeln(pk34_diagonalStripes=failed)@\io.
+
+
+// =======================
+// Speed Limit Tests
+// =======================
+
+// SL1: Posted sign sets speed limit
+speedLimitSign(SignSL1, 45).
+controls(SignSL1, DSL1).
+
+?- \if speedLimit(DSL1, 45) \then
+       writeln(sl1_postedLimit=ok)@\io
+   \else writeln(sl1_postedLimit=failed)@\io.
+
+// SL2: Default highway limit = 55 when no sign posted
+highway(DSL2).
+
+?- \if speedLimit(DSL2, 55) \then
+       writeln(sl2_highwayDefault=ok)@\io
+   \else writeln(sl2_highwayDefault=failed)@\io.
+
+// SL3: Default residential limit = 30
+residentialArea(DSL3).
+
+?- \if speedLimit(DSL3, 30) \then
+       writeln(sl3_residentialDefault=ok)@\io
+   \else writeln(sl3_residentialDefault=failed)@\io.
+
+// SL4: Default school zone limit = 15
+schoolZone(DSL4).
+
+?- \if speedLimit(DSL4, 15) \then
+       writeln(sl4_schoolZoneDefault=ok)@\io
+   \else writeln(sl4_schoolZoneDefault=failed)@\io.
+
+// SL5: Default business district limit = 25
+businessDistrict(DSL5).
+
+?- \if speedLimit(DSL5, 25) \then
+       writeln(sl5_businessDefault=ok)@\io
+   \else writeln(sl5_businessDefault=failed)@\io.
+
+// SL6: Exceeding posted limit = illegalDrive
+participant(SL6, CarSL6).
+straight(CarSL6, DSL6).
+speedLimitSign(SignSL6, 55).
+controls(SignSL6, DSL6).
+drivingSpeed(CarSL6, DSL6, 70).
+
+?- \if illegalDrive(CarSL6, DSL6) \then
+       writeln(sl6_speedingIllegal=ok)@\io
+   \else writeln(sl6_speedingIllegal=failed)@\io.
+
+// SL7: At speed limit = NOT illegalDrive (for this rule)
+participant(SL7, CarSL7).
+straight(CarSL7, DSL7).
+speedLimitSign(SignSL7, 55).
+controls(SignSL7, DSL7).
+drivingSpeed(CarSL7, DSL7, 55).
+
+?- \if (\naf illegalDrive(CarSL7, DSL7)) \then
+       writeln(sl7_atLimitLegal=ok)@\io
+   \else writeln(sl7_atLimitLegal=failed)@\io.
+
+// SL8: School zone with children present => mustReduceSpeed
+participant(SL8, CarSL8).
+straight(CarSL8, DSL8).
+schoolZone(DSL8).
+schoolChildrenPresent(DSL8).
+
+?- \if mustReduceSpeed(CarSL8, DSL8) \then
+       writeln(sl8_schoolZoneReduce=ok)@\io
+   \else writeln(sl8_schoolZoneReduce=failed)@\io.
+
+// SL9: Work zone speed limit sign overrides default
+workZoneSpeedLimitSign(SignSL9, 25).
+controls(SignSL9, DSL9).
+
+?- \if speedLimit(DSL9, 25) \then
+       writeln(sl9_workZoneLimit=ok)@\io
+   \else writeln(sl9_workZoneLimit=failed)@\io.
+
+
+// =======================
+// Railroad Crossing Tests
+// =======================
+
+// RR1: Signal flashing => mustStopAtRailroadCrossing
+participant(RR1, CarRR1).
+straight(CarRR1, DRR1).
+approachingRailroadCrossing(DRR1, CrossingRR1).
+railroadSignalFlashing(CrossingRR1).
+
+?- \if mustStopAtRailroadCrossing(CarRR1, DRR1) \then
+       writeln(rr1_flashingSignal=ok)@\io
+   \else writeln(rr1_flashingSignal=failed)@\io.
+
+?- \if mustStop(CarRR1, DRR1) \then
+       writeln(rr1_mustStop=ok)@\io
+   \else writeln(rr1_mustStop=failed)@\io.
+
+// RR2: Gate down => mustStopAtRailroadCrossing
+participant(RR2, CarRR2).
+straight(CarRR2, DRR2).
+approachingRailroadCrossing(DRR2, CrossingRR2).
+crossingGateDown(CrossingRR2).
+
+?- \if mustStopAtRailroadCrossing(CarRR2, DRR2) \then
+       writeln(rr2_gateDown=ok)@\io
+   \else writeln(rr2_gateDown=failed)@\io.
+
+// RR3: Train approaching => mustStopAtRailroadCrossing
+participant(RR3, CarRR3).
+straight(CarRR3, DRR3).
+approachingRailroadCrossing(DRR3, CrossingRR3).
+trainApproaching(CrossingRR3).
+
+?- \if mustStopAtRailroadCrossing(CarRR3, DRR3) \then
+       writeln(rr3_trainApproaching=ok)@\io
+   \else writeln(rr3_trainApproaching=failed)@\io.
+
+// RR4: Train blocking crossing => mustStop
+participant(RR4, CarRR4).
+straight(CarRR4, DRR4).
+approachingRailroadCrossing(DRR4, CrossingRR4).
+trainBlockingCrossing(CrossingRR4).
+
+?- \if mustStop(CarRR4, DRR4) \then
+       writeln(rr4_trainBlocking=ok)@\io
+   \else writeln(rr4_trainBlocking=failed)@\io.
+
+// RR5: Stopped ON railroad tracks => illegalDrive
+participant(RR5, CarRR5).
+straight(CarRR5, DRR5).
+stoppedOnRailroadTracks(CarRR5, DRR5).
+
+?- \if illegalDrive(CarRR5, DRR5) \then
+       writeln(rr5_stoppedOnTracks=ok)@\io
+   \else writeln(rr5_stoppedOnTracks=failed)@\io.
+
+// RR6: Must look and listen when approaching any crossing
+participant(RR6, CarRR6).
+straight(CarRR6, DRR6).
+approachingRailroadCrossing(DRR6, CrossingRR6).
+
+?- \if mustLookAndListenAtCrossing(CarRR6, DRR6) \then
+       writeln(rr6_lookAndListen=ok)@\io
+   \else writeln(rr6_lookAndListen=failed)@\io.
+
+// RR7: Passing vehicle stopped at crossing => illegalPass
+participant(RR7, CarRR7).
+straight(CarRR7, DRR7).
+vehicleStoppedAtRailroadCrossing(DRR7).
+
+?- \if illegalPass(CarRR7, DRR7) \then
+       writeln(rr7_passStoppedAtCrossing=ok)@\io
+   \else writeln(rr7_passStoppedAtCrossing=failed)@\io.
+
+// RR8: School bus must always stop at railroad crossing
+hasSchoolBusSign(BusRR8).
+hasRedLightsOnTop(BusRR8).
+yellowOrangeColor(BusRR8).
+straight(BusRR8, DRR8).
+approachingRailroadCrossing(DRR8, CrossingRR8).
+
+?- \if mustAlwaysStopAtRailroadCrossing(BusRR8, DRR8) \then
+       writeln(rr8_schoolBusAlwaysStops=ok)@\io
+   \else writeln(rr8_schoolBusAlwaysStops=failed)@\io.
+
+// RR9: Hazmat vehicle must always stop
+participant(RR9, HazRR9).
+straight(HazRR9, DRR9).
+carryingHazardousMaterials(HazRR9).
+approachingRailroadCrossing(DRR9, CrossingRR9).
+
+?- \if mustAlwaysStopAtRailroadCrossing(HazRR9, DRR9) \then
+       writeln(rr9_hazmatAlwaysStops=ok)@\io
+   \else writeln(rr9_hazmatAlwaysStops=failed)@\io.
+
+// RR10: Flagman signals stop => mustStopAtRailroadCrossing
+participant(RR10, CarRR10).
+straight(CarRR10, DRR10).
+approachingRailroadCrossing(DRR10, CrossingRR10).
+flagmanSignalsStop(CrossingRR10).
+
+?- \if mustStopAtRailroadCrossing(CarRR10, DRR10) \then
+       writeln(rr10_flagman=ok)@\io
+   \else writeln(rr10_flagman=failed)@\io.
+
+
+// =======================
+// Turn Signal at Intersection Tests
+// =======================
+
+// TS4: Left turn at intersection without signal => illegalDrive
+participant(TS4, CarTS4).
+leftTurn(CarTS4, DTS4).
+approachingIntersection(DTS4, IntTS4).
+
+?- \if mustSignalTurn(CarTS4, DTS4) \then
+       writeln(ts4_mustSignalLeft=ok)@\io
+   \else writeln(ts4_mustSignalLeft=failed)@\io.
+
+?- \if illegalDrive(CarTS4, DTS4) \then
+       writeln(ts4_noSignalIllegal=ok)@\io
+   \else writeln(ts4_noSignalIllegal=failed)@\io.
+
+// TS5: Right turn with turn signal lamp at 100 feet => NOT illegal
+participant(TS5, CarTS5).
+rightTurn(CarTS5, DTS5).
+approachingIntersection(DTS5, IntTS5).
+signaledAtLeast100Feet(CarTS5, DTS5).
+usedTurnSignalLamp(CarTS5, DTS5).
+
+?- \if (\naf illegalDrive(CarTS5, DTS5)) \then
+       writeln(ts5_lampSignalOk=ok)@\io
+   \else writeln(ts5_lampSignalOk=failed)@\io.
+
+// TS6: Hand/arm signal is a valid turn signal
+participant(TS6, CarTS6).
+leftTurn(CarTS6, DTS6).
+approachingIntersection(DTS6, IntTS6).
+signaledAtLeast100Feet(CarTS6, DTS6).
+usedHandAndArmSignal(CarTS6, DTS6).
+
+?- \if validTurnSignal(CarTS6, DTS6) \then
+       writeln(ts6_handSignalValid=ok)@\io
+   \else writeln(ts6_handSignalValid=failed)@\io.
+
+
+// =======================
+// Metered / Time-Limit Parking Tests
+// =======================
+
+// MT1: Expired meter => illegalDrive
+vehicleStopped(CarMT1, LocMT1).
+meteredSpace(LocMT1).
+meterExpired(LocMT1).
+
+?- \if illegalDrive(CarMT1, LocMT1) \then
+       writeln(mt1_expiredMeter=ok)@\io
+   \else writeln(mt1_expiredMeter=failed)@\io.
+
+// MT2: Parked beyond time limit (2-hour zone, parked 130 min) => illegalDrive
+vehicleStopped(CarMT2, LocMT2).
+timeLimitZone(LocMT2, 120).
+parkedDuration(CarMT2, LocMT2, 130).
+
+?- \if illegalDrive(CarMT2, LocMT2) \then
+       writeln(mt2_timeLimitExceeded=ok)@\io
+   \else writeln(mt2_timeLimitExceeded=failed)@\io.
+
+// MT3: Under time limit (2-hour zone, parked 60 min) => NOT illegalDrive
+vehicleStopped(CarMT3, LocMT3).
+timeLimitZone(LocMT3, 120).
+parkedDuration(CarMT3, LocMT3, 60).
+
+?- \if (\naf illegalDrive(CarMT3, LocMT3)) \then
+       writeln(mt3_withinTimeLimit=ok)@\io
+   \else writeln(mt3_withinTimeLimit=failed)@\io.
+
+// MT4: Cumulative block time exceeds limit => illegalDrive
+vehicleStopped(CarMT4, LocMT4).
+timeLimitZone(LocMT4, 120).
+parkedDuration(CarMT4, LocMT4, 50).
+cumulativeBlockTime(CarMT4, LocMT4, 130).
+
+?- \if illegalDrive(CarMT4, LocMT4) \then
+       writeln(mt4_cumulativeLimit=ok)@\io
+   \else writeln(mt4_cumulativeLimit=failed)@\io.
+
+
+// =======================
+// Funeral Procession Tests
+// =======================
+
+// FP1: Vehicle in procession identified
+funeralProcession(ProcessFP1).
+processionVehicle(CarFP1, ProcessFP1).
+
+?- \if inFuneralProcession(CarFP1) \then
+       writeln(fp1_inProcession=ok)@\io
+   \else writeln(fp1_inProcession=failed)@\io.
+
+// FP2: Procession vehicle may proceed through intersection
+funeralProcession(ProcessFP2).
+processionVehicle(CarFP2, ProcessFP2).
+straight(CarFP2, DFP2).
+processionMovingThrough(CarFP2, DFP2).
+
+?- \if mayProceed(CarFP2, DFP2) \then
+       writeln(fp2_processionProceed=ok)@\io
+   \else writeln(fp2_processionProceed=failed)@\io.
+
+// FP3: Non-procession driver must yield when procession is crossing
+participant(FP3, CarFP3).
+straight(CarFP3, DFP3).
+funeralProcessionCrossing(DFP3).
+
+?- \if mustYield(CarFP3, DFP3) \then
+       writeln(fp3_yieldToProcession=ok)@\io
+   \else writeln(fp3_yieldToProcession=failed)@\io.
+
+// FP4: Cutting into procession => illegalDrive
+participant(FP4, CarFP4).
+straight(CarFP4, DFP4).
+cutsIntoFuneralProcession(CarFP4, DFP4).
+
+?- \if illegalDrive(CarFP4, DFP4) \then
+       writeln(fp4_cutsIntoProcession=ok)@\io
+   \else writeln(fp4_cutsIntoProcession=failed)@\io.
+
+// FP5: Procession must yield to emergency vehicle
+funeralProcession(ProcessFP5).
+processionVehicle(CarFP5, ProcessFP5).
+straight(CarFP5, DFP5).
+emergencyVehicleApproaching(DFP5).
+
+?- \if mustYield(CarFP5, DFP5) \then
+       writeln(fp5_processionYieldsEmergency=ok)@\io
+   \else writeln(fp5_processionYieldsEmergency=failed)@\io.

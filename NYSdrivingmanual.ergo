@@ -1,0 +1,1570 @@
+/*
+  NY Driver’s Manual, Chapter 5, “RIGHT-OF-WAY”:
+
+  1. A driver who approaches an intersection must yield the right-of-way
+     to traffic that is already in the intersection.
+
+  2. If drivers approaching from opposite directions reach an intersection
+     at about the same time, a driver that turns left must yield to traffic
+     that goes straight or turns right.
+
+  3. At intersections not controlled by signs or signals, or where two or
+     more drivers stop at STOP signs at the same time and they are at
+     right angles, the driver on the left must yield to the driver on the right.
+
+  4. A vehicle that enters a roadway from a driveway, private road or
+     another place that is not a roadway, must stop and yield the
+     right-of-way to traffic on the roadway and to pedestrians.
+*/
+
+/* Basic helper: a person driving in some situation */
+drive(?Agent, ?Drive) :-
+    straight(?Agent, ?Drive).
+drive(?Agent, ?Drive) :-
+    leftTurn(?Agent, ?Drive).
+drive(?Agent, ?Drive) :-
+    rightTurn(?Agent, ?Drive).
+
+/* 1. Car already in the intersection has right-of-way */
+rightOfWay(?Situation, ?InDriver) :-
+    participant(?Situation, ?InDriver),
+    participant(?Situation, ?OtherDriver),
+    ?InDriver != ?OtherDriver,
+
+    drive(?InDriver, ?InDrive),
+    drive(?OtherDriver, ?OtherDrive),
+
+    inIntersection(?InDrive, ?Intersection),
+    approachingIntersection(?OtherDrive, ?Intersection).
+
+/* 2. Left-turning driver must yield to straight/right driver
+      when they arrive from opposite directions */
+rightOfWay(?Situation, ?ThroughDriver) :-
+    participant(?Situation, ?ThroughDriver),
+    participant(?Situation, ?LeftDriver),
+    ?ThroughDriver != ?LeftDriver,
+
+    drive(?ThroughDriver, ?ThroughDrive),
+    drive(?LeftDriver, ?LeftDrive),
+
+    approachingIntersection(?ThroughDrive, ?Intersection),
+    approachingIntersection(?LeftDrive, ?Intersection),
+
+    oppositeDirections(?ThroughDrive, ?LeftDrive),
+
+    ( straight(?ThroughDriver, ?ThroughDrive)
+    ; rightTurn(?ThroughDriver, ?ThroughDrive)
+    ),
+    leftTurn(?LeftDriver, ?LeftDrive).
+
+/* 3. At right-angle STOP / uncontrolled: driver on the right goes first */
+rightOfWay(?Situation, ?RightDriver) :-
+    participant(?Situation, ?RightDriver),
+    participant(?Situation, ?LeftDriver),
+    ?RightDriver != ?LeftDriver,
+
+    drive(?RightDriver, ?RightDrive),
+    drive(?LeftDriver, ?LeftDrive),
+
+    intersectingRoads(?RightDrive, ?LeftDrive),
+    atStopControl(?RightDrive),
+    atStopControl(?LeftDrive),
+
+    toTheRightOf(?RightDrive, ?LeftDrive).
+
+/* 4. Driver entering from driveway/private road must yield to road traffic */
+mustYield(?EnteringDriver, ?RoadDriver, ?Situation) :-
+    participant(?Situation, ?EnteringDriver),
+    participant(?Situation, ?RoadDriver),
+    ?EnteringDriver != ?RoadDriver,
+
+    drive(?EnteringDriver, ?EnteringDrive),
+    drive(?RoadDriver, ?RoadDrive),
+
+    fromNonRoadway(?EnteringDrive),
+    onRoadway(?RoadDrive),
+
+    sameRoad(?EnteringDrive, ?RoadDrive).
+
+/* Optional: derive right-of-way from mustYield so tests can just use rightOfWay/2 */
+rightOfWay(?Situation, ?RoadDriver) :-
+    mustYield(?EnteringDriver, ?RoadDriver, ?Situation).
+
+/* Generic “failure to yield” at intersections or when joining roadway */
+illegalDrive(?Agent, ?Drive) :-
+    illegalNoYield(?Agent, ?Drive).
+
+illegalNoYield(?Agent, ?Drive) :-
+    drive(?Agent, ?Drive),
+    participant(?Situation, ?Agent),
+    participant(?Situation, ?Other),
+    ?Other != ?Agent,
+
+    /* Agent is required to yield / other has ROW */
+    (
+        mustYield(?Agent, ?Other, ?Situation);
+        rightOfWay(?Situation, ?Other)
+    ),
+
+    /* Agent does NOT follow the rule by yielding */
+    \naf (
+        follows(?Response, ?Situation),
+        yield(?Agent, ?Other, ?Response)
+    ).
+
+
+
+// 5. Drivers must yield to pedestrians (and bicyclists) in crosswalks
+
+// If a driver is approaching a crosswalk that a pedestrian/bicyclist is legally using,
+// the driver must yield and the pedestrian/bicyclist has ROW.
+mustYield(?Driver, ?Other, ?Situation) :-
+    participant(?Situation, ?Driver),
+    participant(?Situation, ?Other),
+    ?Driver != ?Other,
+
+    drive(?Driver, ?Drive),
+
+    (   pedestrian(?Other)
+    ;   bicyclist(?Other)
+    ),
+
+    inCrosswalk(?Other, ?Crosswalk),
+    approachingCrosswalk(?Drive, ?Crosswalk).
+
+rightOfWay(?Situation, ?Other) :-
+    mustYield(?Driver, ?Other, ?Situation).
+
+
+// 6. You cannot enter an intersection if you cannot clear it;
+//    do not block intersections or cross-streets ("gridlock").
+
+// Case A: intersection is backed up beyond, driver enters even though they cannot clear.
+illegalBlockIntersection(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    facesIntersection(?Drive, ?Intersection),
+    backedUpBeyond(?Intersection),
+    cannotClear(?Drive, ?Intersection),
+    entersIntersection(?Drive, ?Intersection).
+
+// Case B: driver causes gridlock by blocking a cross-street.
+illegalBlockIntersection(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    blocksCrossStreet(?Drive, ?CrossStreet),
+    crossStreet(?CrossStreet).
+
+
+// 7. Drivers entering a traffic circle / rotary must yield to drivers
+//    already in the circle.
+
+rightOfWay(?Situation, ?InDriver) :-
+    participant(?Situation, ?InDriver),
+    participant(?Situation, ?ApproachDriver),
+    ?InDriver != ?ApproachDriver,
+
+    drive(?InDriver, ?InDrive),
+    drive(?ApproachDriver, ?ApproachDrive),
+
+    inRoundabout(?InDrive, ?Circle),
+    approachingRoundabout(?ApproachDrive, ?Circle).
+
+//8. Emergency vehicle has ROW when responding with lights or siren
+responding(?EV) :-
+    emergencyVehicle(?EV),
+    ( lightsOn(?EV) ; sirenOn(?EV) ).
+    
+rightOfWay(?Situation, ?EV) :-
+    responding(?EV),
+    participant(?Situation, ?EV),
+    participant(?Situation, ?Other),
+    ?EV != ?Other.
+
+//9. Driver must pull over and stop when they detect an approaching emergency vehicle
+mustYield(?Driver, ?EV, ?Situation) :-
+    emergencyVehicle(?EV),
+    responding(?EV),
+    detects(?Driver, ?EV),
+    participant(?Situation, ?Driver),
+    participant(?Situation, ?EV),
+    ?Driver != ?EV.
+
+//10.
+mustClearIntersection(?Driver, ?Situation) :-
+    participant(?Situation, ?Driver),
+    drive(?Driver, ?Drive),
+    inIntersection(?Drive, ?Int),
+    emergencyVehicle(?EV),
+    responding(?EV),
+    detects(?Driver, ?EV).
+
+// Clearing intersection takes priority over pulling over
+requiredAction(?Driver, ?Situation, clearIntersection) :-
+    mustClearIntersection(?Driver, ?Situation).
+
+requiredAction(?Driver, ?Situation, pullOverRight) :-
+    mustYield(?Driver, ?EV, ?Situation),
+    \+ mustClearIntersection(?Driver, ?Situation).  
+
+//11. Illegal failure to yield to emergency vehicle.
+illegalDrive(?Driver, ?Drive) :-
+    responding(?EV),
+    mustYield(?Driver, ?EV, ?Situation),
+    \naf (
+        follows(?Response, ?Situation),
+        yield(?Driver, ?EV, ?Response)
+    ),
+    drive(?Driver, ?Drive).
+
+//12. Move Over Law
+// Vehicles relevant to the Move Over law:
+//   hazardVehicle/1     – tow truck, snow plow, etc.
+//   blueLightVehicle/1  – volunteer firefighter personal car
+//   greenLightVehicle/1 – volunteer ambulance/rescue car
+//   amberLightVehicle/1 – rural mail carrier, school bus, etc.
+// Specific instances of these are asserted in test/scenario files, not here.
+
+// A vehicle is "Move Over" relevant when it's stopped and has appropriate lights on.
+stoppedOrStanding(?Drive) :-
+    stopped(?Drive).
+stoppedOrStanding(?Drive) :-
+    parked(?Drive).
+stoppedOrStanding(?Drive) :-
+    standing(?Drive).
+
+moveOverLightVehicle(?V) :-
+    emergencyVehicle(?V),
+    lightsOn(?V).
+moveOverLightVehicle(?V) :-
+    hazardVehicle(?V),
+    amberLightsOn(?V).
+moveOverLightVehicle(?V) :-
+    blueLightVehicle(?V),
+    lightsOn(?V).
+moveOverLightVehicle(?V) :-
+    greenLightVehicle(?V),
+    lightsOn(?V).
+// Move Over context: driver passing a stopped, lit vehicle on the same road
+moveOverContext(?Situation, ?Driver, ?Special, ?DDriver, ?DSpecial, ?Road) :-
+    participant(?Situation, ?Driver),
+    participant(?Situation, ?Special),
+    ?Driver != ?Special,
+
+    drive(?Driver, ?DDriver),
+    drive(?Special, ?DSpecial),
+
+    onRoad(?DDriver, ?Road),
+    onRoad(?DSpecial, ?Road),
+
+    stoppedOrStanding(?DSpecial),
+    moveOverLightVehicle(?Special).
+
+// All roads: must reduce speed when passing
+mustReduceSpeedMoveOver(?Driver, ?Situation) :-
+    moveOverContext(?Situation, ?Driver, ?Special, ?DDriver, ?DSpecial, ?Road).
+
+
+
+mustChangeLaneMoveOver(?Driver, ?Situation) :-
+    moveOverContext(?Situation, ?Driver, ?Special, ?DDriver, ?DSpecial, ?Road),
+    controlledAccess(?Road),
+    multiLane(?Road).
+
+// ===============================
+//  U-TURN RULES
+// ===============================
+
+// Identifies that a driver is attempting a U-turn.
+uTurn(?Driver, ?Drive) :-
+    performingUTurn(?Driver, ?Drive).
+
+// -------------------------------
+// Illegal U-turn locations
+// -------------------------------
+
+// Cannot make a U-turn if visibility is less than 500 feet.
+illegalUTurn(?Driver, ?Drive) :-
+    uTurn(?Driver, ?Drive),
+    visibility(?Drive, ?Feet),
+    ?Feet < 500.
+
+// Illegal in NYC business districts.
+illegalUTurn(?Driver, ?Drive) :-
+    uTurn(?Driver, ?Drive),
+    inBusinessDistrictNYC(?Drive).
+
+// Illegal where NO U-TURN sign is posted.
+illegalUTurn(?Driver, ?Drive) :-
+    uTurn(?Driver, ?Drive),
+    noUTurnSignPosted(?Drive).
+
+// Illegal on limited-access expressways.
+illegalUTurn(?Driver, ?Drive) :-
+    uTurn(?Driver, ?Drive),
+    onLimitedAccessExpressway(?Drive).
+
+// Illegal in school zones.
+illegalUTurn(?Driver, ?Drive) :-
+    uTurn(?Driver, ?Drive),
+    inSchoolZone(?Drive).
+
+// -------------------------------
+// Wrong lane for U-turn
+// Must start in the leftmost lane near centerline.
+// -------------------------------
+illegalUTurn(?Driver, ?Drive) :-
+    uTurn(?Driver, ?Drive),
+    startsInLane(?Drive, ?Lane),
+    \+ leftmostLane(?Lane).
+
+// -------------------------------
+// Allowed U-turn with a green left arrow,
+// provided it is not otherwise illegal.
+// -------------------------------
+allowedUTurn(?Driver, ?Situation) :-
+    participant(?Situation, ?Driver),
+    uTurn(?Driver, ?Drive),
+    greenLeftArrow(?Signal),
+    controls(?Signal, ?Drive),
+    \+ illegalUTurn(?Driver, ?Drive).
+
+// A driver doing a permitted U-turn must still yield to other traffic.
+mustYield(?Driver, ?Other, ?Situation) :-
+    allowedUTurn(?Driver, ?Situation),
+    participant(?Situation, ?Other),
+    drive(?Other, ?OtherDrive),
+    approachingIntersection(?OtherDrive, ?Int),
+    ?Driver != ?Other.
+
+
+
+
+// ===============================
+//  TRAFFIC SIGNS
+// ===============================
+
+// Sign type classification from shape and color
+regulationSign(?Sign) :-
+    whiteRectangle(?Sign),
+    ( blackLetters(?Sign) ; redLetters(?Sign) ).
+
+warningSign(?Sign) :-
+    yellowDiamond(?Sign),
+    blackLetters(?Sign).
+
+destinationSign(?Sign) :-
+    greenSign(?Sign),
+    whiteLetters(?Sign).
+
+serviceSign(?Sign) :-
+    blueSign(?Sign),
+    whiteLetters(?Sign).
+
+// A red-circle-slash sign prohibits an action on this drive
+prohibitedBySign(?Action, ?Drive) :-
+    prohibitionSign(?Sign, ?Action),
+    controls(?Sign, ?Drive).
+
+// ===============================
+//  Stop Sign Rules
+// ===============================
+
+// Stop position priority: stop line > crosswalk > before intersection.
+mustStopAt(?Driver, ?Drive, stopLine(?Line)) :-
+    drive(?Driver, ?Drive),
+    controls(?Sign, ?Drive),
+    stopSign(?Sign),
+    stopLine(?Line, ?Drive).
+
+mustStopAt(?Driver, ?Drive, beforeCrosswalk(?CW)) :-
+    drive(?Driver, ?Drive),
+    controls(?Sign, ?Drive),
+    stopSign(?Sign),
+    crosswalkAt(?CW, ?Drive),
+    \naf stopLine(?AnyLine, ?Drive).
+
+mustStopAt(?Driver, ?Drive, beforeIntersection(?Int)) :-
+    drive(?Driver, ?Drive),
+    controls(?Sign, ?Drive),
+    stopSign(?Sign),
+    facesIntersection(?Drive, ?Int),
+    \naf stopLine(?AnyLine, ?Drive),
+    \naf crosswalkAt(?AnyCW, ?Drive).
+
+mustStop(?Driver, ?Drive) :-
+    mustStopAt(?Driver, ?Drive, ?Loc).
+
+// Illegal to pass a stop sign without stopping
+illegalPassStopSign(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    controls(?Sign, ?Drive),
+    stopSign(?Sign),
+    \naf stoppedAtSign(?Driver, ?Drive).
+
+illegalDrive(?Driver, ?Drive) :-
+    illegalPassStopSign(?Driver, ?Drive).
+
+// After stopping, must yield to vehicles in or heading toward intersection
+mustYield(?Driver, ?Other, ?Situation) :-
+    participant(?Situation, ?Driver),
+    participant(?Situation, ?Other),
+    ?Driver != ?Other,
+    drive(?Driver, ?Drive),
+    drive(?Other, ?OtherDrive),
+    controls(?Sign, ?Drive),
+    stopSign(?Sign),
+    facesIntersection(?Drive, ?Int),
+    ( inIntersection(?OtherDrive, ?Int)
+    ; approachingIntersection(?OtherDrive, ?Int)
+    ).
+
+// Must also yield to pedestrians/bicyclists in crosswalk at stop sign
+mustYield(?Driver, ?Ped, ?Situation) :-
+    participant(?Situation, ?Driver),
+    participant(?Situation, ?Ped),
+    ?Driver != ?Ped,
+    ( pedestrian(?Ped) ; bicyclist(?Ped) ),
+    drive(?Driver, ?Drive),
+    controls(?Sign, ?Drive),
+    stopSign(?Sign),
+    inCrosswalk(?Ped, ?CW),
+    ( crosswalkAt(?CW, ?Drive)
+    ; facesIntersection(?Drive, ?Int), intersectionCrosswalk(?CW, ?Int)
+    ).
+
+// ===============================
+//  Yield Sign Rules
+// ===============================
+
+// Must reduce speed when approaching a yield sign
+mustReduceSpeed(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    controls(?Sign, ?Drive),
+    yieldSign(?Sign).
+
+// Must yield ROW to vehicles in or heading toward intersection
+mustYield(?Driver, ?Other, ?Situation) :-
+    participant(?Situation, ?Driver),
+    participant(?Situation, ?Other),
+    ?Driver != ?Other,
+    drive(?Driver, ?Drive),
+    drive(?Other, ?OtherDrive),
+    controls(?Sign, ?Drive),
+    yieldSign(?Sign),
+    facesIntersection(?Drive, ?Int),
+    ( inIntersection(?OtherDrive, ?Int)
+    ; approachingIntersection(?OtherDrive, ?Int)
+    ).
+
+// Must yield to pedestrians/bicyclists in crosswalk at yield sign
+mustYield(?Driver, ?Ped, ?Situation) :-
+    participant(?Situation, ?Driver),
+    participant(?Situation, ?Ped),
+    ?Driver != ?Ped,
+    ( pedestrian(?Ped) ; bicyclist(?Ped) ),
+    drive(?Driver, ?Drive),
+    controls(?Sign, ?Drive),
+    yieldSign(?Sign),
+    inCrosswalk(?Ped, ?CW),
+    facesIntersection(?Drive, ?Int),
+    intersectionCrosswalk(?CW, ?Int).
+
+// Must come to a full stop at yield sign if traffic conditions require it
+mustStop(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    controls(?Sign, ?Drive),
+    yieldSign(?Sign),
+    trafficPresent(?Drive).
+
+// ===============================
+//  Prohibition Sign (Red-Slash)
+// ===============================
+
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    performsAction(?Driver, ?Drive, ?Action),
+    prohibitedBySign(?Action, ?Drive).
+
+
+// ===============================
+//  WARNING SIGNS
+// ===============================
+
+// Warning sign: yellow diamond with black letters/symbols
+// (already covered by warningSign/1 above)
+
+// A recommended-speed sign joined with a warning sign advises reduced speed.
+recommendedSpeedAdvisory(?Drive, ?Speed) :-
+    warningSign(?Sign),
+    controls(?Sign, ?Drive),
+    joinedRecommendedSpeed(?Sign, ?Speed).
+
+// Driver should reduce speed in that area (advisory, not a strict legal limit).
+shouldReduceSpeed(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    recommendedSpeedAdvisory(?Drive, ?Speed).
+
+// ===============================
+//  WORK AREA (CONSTRUCTION ZONE) SIGNS
+// ===============================
+
+// Work area sign: orange with black letters or symbols.
+workAreaSign(?Sign) :-
+    orangeSign(?Sign),
+    blackLetters(?Sign).
+
+// A drive is in a work zone if a work area sign controls it.
+inWorkZone(?Drive) :-
+    workAreaSign(?Sign),
+    controls(?Sign, ?Drive).
+
+// Must drive at reduced speed through any work zone (even without a posted limit).
+mustReduceSpeed(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    inWorkZone(?Drive).
+
+// Must obey flag persons present in the work zone.
+mustObeyFlagPerson(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    inWorkZone(?Drive),
+    flagPersonPresent(?Drive).
+
+// Work zone speed limit may be as low as 25 MPH.
+// Illegal to exceed the posted work zone speed limit.
+illegalWorkZoneSpeed(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    inWorkZone(?Drive),
+    postedWorkZoneLimit(?Drive, ?Limit),
+    drivingSpeed(?Driver, ?Drive, ?Speed),
+    ?Speed > ?Limit.
+
+illegalDrive(?Driver, ?Drive) :-
+    illegalWorkZoneSpeed(?Driver, ?Drive).
+
+// Illegal to disobey a flag person.
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    inWorkZone(?Drive),
+    flagPersonPresent(?Drive),
+    \naf obeysFlager(?Driver, ?Drive).
+
+// ===============================
+//  ROUTE SIGNS
+// ===============================
+
+// Route sign shapes identify route type.
+routeSign(?Sign, state)     :- stateRouteSign(?Sign).
+routeSign(?Sign, us)        :- usRouteSign(?Sign).
+routeSign(?Sign, interstate):- interstateRouteSign(?Sign).
+routeSign(?Sign, county)    :- countyRouteSign(?Sign).
+
+// A drive is on a particular route type when a route sign controls it.
+onRouteType(?Drive, ?Type) :-
+    routeSign(?Sign, ?Type),
+    controls(?Sign, ?Drive).
+
+// ===============================
+//  SERVICE SIGNS (extended)
+// ===============================
+
+// Service sign indicates a nearby service of a given kind.
+// serviceSign/1 already defined above (blue + white letters).
+// Extend: link a service sign to a service type and location.
+nearbyService(?Drive, ?ServiceType, ?Location) :-
+    serviceSign(?Sign),
+    controls(?Sign, ?Drive),
+    indicatesService(?Sign, ?ServiceType, ?Location).
+
+
+// ===============================
+//  TRAFFIC SIGNALS
+// ===============================
+
+// --- Out-of-service traffic lights ---
+
+// If traffic lights are out of service or not operating correctly,
+// driver must stop as if at a stop sign, then follow right-of-way rules
+// (unless directed by a traffic officer).
+mustStopAt(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    approachingIntersection(?Drive, ?Intersection),
+    trafficLightOutOfService(?Intersection),
+    \naf directedByOfficer(?Driver, ?Drive).
+
+// --- STEADY RED ---
+
+mustStop(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    facingSteadyRed(?Drive).
+
+// May go only in the direction of a green arrow shown with the red light,
+// and only if the intersection is clear.
+mayProceedOnRedArrow(?Driver, ?Drive, ?Intersection) :-
+    drive(?Driver, ?Drive),
+    facingSteadyRed(?Drive),
+    greenArrowWithRed(?Drive, ?Direction),
+    intersectionClear(?Intersection).
+
+// Right turn on steady red: allowed after full stop + yield to oncoming + pedestrians,
+// UNLESS prohibited by sign/signal/marking, or in NYC without a permit sign,
+// or driver is a school bus carrying students.
+mayTurnRightOnRed(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    rightTurn(?Driver, ?Drive),
+    facingSteadyRed(?Drive),
+    fullStop(?Driver, ?Drive),
+    yieldedToOncoming(?Driver, ?Drive),
+    yieldedToPedestrians(?Driver, ?Drive),
+    \naf noTurnOnRedSign(?Drive),
+    \naf turnProhibitedBySignal(?Drive),
+    \naf turnProhibitedByMarking(?Drive),
+    \naf inNYC(?Drive),
+    \naf schoolBusWithStudents(?Driver).
+
+// NYC exception: right on red allowed only if a sign explicitly permits it.
+mayTurnRightOnRed(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    rightTurn(?Driver, ?Drive),
+    facingSteadyRed(?Drive),
+    fullStop(?Driver, ?Drive),
+    yieldedToOncoming(?Driver, ?Drive),
+    yieldedToPedestrians(?Driver, ?Drive),
+    \naf noTurnOnRedSign(?Drive),
+    \naf turnProhibitedBySignal(?Drive),
+    \naf turnProhibitedByMarking(?Drive),
+    inNYC(?Drive),
+    rightOnRedPermittedSign(?Drive),
+    \naf schoolBusWithStudents(?Driver).
+
+// School buses carrying students cannot turn right on red.
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    rightTurn(?Driver, ?Drive),
+    facingSteadyRed(?Drive),
+    schoolBusWithStudents(?Driver),
+    \naf fullStop(?Driver, ?Drive).
+
+// Left turn on red: allowed only from a one-way road into another one-way road,
+// after full stop + yield.
+mayTurnLeftOnRed(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    leftTurn(?Driver, ?Drive),
+    facingSteadyRed(?Drive),
+    fullStop(?Driver, ?Drive),
+    yieldedToOncoming(?Driver, ?Drive),
+    yieldedToPedestrians(?Driver, ?Drive),
+    oneWayRoad(?Drive),
+    turnsIntoOneWayRoad(?Drive),
+    \naf noTurnOnRedSign(?Drive),
+    \naf turnProhibitedBySignal(?Drive),
+    \naf turnProhibitedByMarking(?Drive).
+
+// It is illegal to turn on red if a sign/signal/marking prohibits it.
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    facingSteadyRed(?Drive),
+    ( noTurnOnRedSign(?Drive)
+    ; turnProhibitedBySignal(?Drive)
+    ; turnProhibitedByMarking(?Drive)
+    ),
+    ( leftTurn(?Driver, ?Drive)
+    ; rightTurn(?Driver, ?Drive)
+    ).
+
+// --- FLASHING RED ---
+// Same as a stop sign.
+mustStop(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    facingFlashingRed(?Drive).
+
+mustYield(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    facingFlashingRed(?Drive).
+
+// --- RED ARROW ---
+// Cannot go in the direction of the arrow; no turn on red permitted.
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    facingRedArrow(?Drive, ?Direction),
+    movingInDirection(?Driver, ?Drive, ?Direction).
+
+// --- STEADY YELLOW ---
+// Be prepared to stop; signal is about to turn red.
+shouldPrepareToStop(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    facingSteadyYellow(?Drive).
+
+// --- FLASHING YELLOW ---
+// Drive with caution.
+mustDriveWithCaution(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    facingFlashingYellow(?Drive).
+
+// --- YELLOW ARROW ---
+// Green-arrow protection ending; prepare to stop if turning in that direction.
+shouldPrepareToStop(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    facingYellowArrow(?Drive, ?Direction),
+    movingInDirection(?Driver, ?Drive, ?Direction).
+
+// --- STEADY GREEN ---
+// Go, but yield to other traffic at the intersection.
+mayProceed(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    facingSteadyGreen(?Drive).
+
+mustYield(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    facingSteadyGreen(?Drive),
+    otherTrafficAtIntersection(?Drive).
+
+// --- GREEN ARROW ---
+// Go in the direction of the arrow; yield to other traffic.
+mayProceedInDirection(?Driver, ?Drive, ?Direction) :-
+    drive(?Driver, ?Drive),
+    facingGreenArrow(?Drive, ?Direction).
+
+mustYield(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    facingGreenArrow(?Drive, ?Direction),
+    otherTrafficAtIntersection(?Drive).
+
+
+// ===============================
+//  LANE USE CONTROL LIGHTS
+// ===============================
+
+// Steady red X: do not drive in this lane.
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    laneControlLight(?Drive, steadyRedX).
+
+// Steady yellow X: must move out of this lane.
+mustChangeLane(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    laneControlLight(?Drive, steadyYellowX).
+
+// Flashing yellow X: lane for left turn only.
+laneForLeftTurnOnly(?Drive) :-
+    laneControlLight(?Drive, flashingYellowX).
+
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    laneForLeftTurnOnly(?Drive),
+    \naf leftTurn(?Driver, ?Drive).
+
+// Green arrow: lane is open for use.
+laneOpen(?Drive) :-
+    laneControlLight(?Drive, greenArrow).
+
+
+// ===============================
+//  PAVEMENT MARKINGS
+// ===============================
+
+// --- Edge lines ---
+// Illegal to cross edge (solid) line except when directed by officer or sign.
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    crossesEdgeLine(?Driver, ?Drive),
+    \naf directedByOfficer(?Driver, ?Drive),
+    \naf allowedByCrossingSign(?Drive).
+
+// --- Lane line colors ---
+// White lines separate same-direction traffic.
+sameDirLanes(?LaneA, ?LaneB) :-
+    whiteLaneLine(?LaneA, ?LaneB).
+
+// Yellow lines separate opposite-direction traffic.
+oppositeDirLanes(?LaneA, ?LaneB) :-
+    yellowLaneLine(?LaneA, ?LaneB).
+
+// --- Broken line ---
+// One broken line: may pass or change lanes if safe, won't interfere with traffic.
+mayPass(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    brokenLaneLine(?Drive),
+    safe(?Driver, ?Drive),
+    \naf interfereWithTraffic(?Driver, ?Drive).
+
+mayChangeLane(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    brokenLaneLine(?Drive),
+    safe(?Driver, ?Drive),
+    \naf interfereWithTraffic(?Driver, ?Drive).
+
+// --- Solid line alongside broken line ---
+// On solid side: cannot pass (except left turn into driveway).
+illegalPass(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    solidSideOfLine(?Driver, ?Drive),
+    \naf leftTurnIntoDriveway(?Driver, ?Drive).
+
+// On broken side: may pass if safe and won't interfere.
+mayPass(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    brokenSideOfLine(?Driver, ?Drive),
+    safe(?Driver, ?Drive),
+    \naf interfereWithTraffic(?Driver, ?Drive).
+
+// --- Double solid lines ---
+// Cannot pass or change lanes.
+// May cross only to turn left to enter/leave the highway (driveway, U-turn, etc.)
+illegalPass(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    doubleSolidLines(?Drive),
+    \naf leftTurnAcrossDoubleSolid(?Driver, ?Drive).
+
+illegalLaneChange(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    doubleSolidLines(?Drive),
+    \naf leftTurnAcrossDoubleSolid(?Driver, ?Drive).
+
+// --- One solid line ---
+// May pass/change lane only when obstructions or traffic conditions make it necessary.
+mayPass(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    singleSolidLine(?Drive),
+    ( obstructionInRoad(?Drive)
+    ; trafficConditionRequires(?Drive)
+    ).
+
+// --- Stop lines and crosswalks ---
+// When required to stop by sign, light, or officer: must stop before stop line.
+mustStopBeforeStopLine(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    stopLine(?Drive),
+    ( mustStop(?Driver, ?Drive)
+    ; mustYield(?Driver, ?Drive)
+    ).
+
+// Must stop before crosswalk when required.
+mustStopBeforeCrossWalk(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    markedCrossWalk(?Drive),
+    ( mustStop(?Driver, ?Drive)
+    ; mustYield(?Driver, ?Drive)
+    ).
+
+// --- Diamond (reserved) lanes ---
+// Cannot use reserved lane unless vehicle meets occupancy/special requirements.
+reservedLane(?Drive) :-
+    diamondSymbol(?Drive).
+
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    reservedLane(?Drive),
+    \naf meetsLaneRequirements(?Driver, ?Drive).
+
+// Exception: in city streets, non-HOV may enter diamond lane briefly
+// to make a right turn at the next intersection (broken white line section).
+mayEnterReservedLane(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    reservedLane(?Drive),
+    brokenWhiteLineSectionEntry(?Drive),
+    rightTurnAtNextIntersection(?Driver, ?Drive),
+    \naf meetsLaneRequirements(?Driver, ?Drive).
+
+
+// ===============================
+//  TRAFFIC OFFICERS
+// ===============================
+
+// Persons authorized to direct traffic.
+authorizedTrafficDirector(?Person) :- policeOfficer(?Person).
+authorizedTrafficDirector(?Person) :- firePolice(?Person).
+authorizedTrafficDirector(?Person) :- highwayFlagPerson(?Person).
+authorizedTrafficDirector(?Person) :- schoolCrossingPerson(?Person).
+authorizedTrafficDirector(?Person) :- schoolBusDriver(?Person).
+
+// A driver is directed by an authorized officer/person.
+directedByOfficer(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    authorizedTrafficDirector(?Director),
+    officerDirects(?Director, ?Driver, ?Drive).
+
+// Officer directions take precedence over all signs, signals, and markings.
+// If an officer signals stop, driver must stop — even at a green light.
+mustStop(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    authorizedTrafficDirector(?Director),
+    officerDirectsStop(?Director, ?Driver, ?Drive).
+
+// If an officer signals to proceed, driver may proceed — even through red or stop sign.
+mayProceed(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    authorizedTrafficDirector(?Director),
+    officerDirectsProceed(?Director, ?Driver, ?Drive).
+
+// Officer-directed proceed: mayProceed fires even when mustStop would also apply from a signal.
+
+
+// ===============================
+//  CHAPTER 6: PASSING
+// ===============================
+
+// --- General passing rules ---
+
+// Must drive on the right side of the road.
+mustDriveOnRight(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive).
+
+// Cannot exceed the speed limit to pass another vehicle.
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    passingVehicle(?Driver, ?Drive),
+    drivingSpeed(?Driver, ?Drive, ?Speed),
+    speedLimit(?Drive, ?Limit),
+    ?Speed > ?Limit.
+
+// --- Motorcycles ---
+
+// When passing a motorcycle, must give the same full-lane width as other vehicles.
+mustGiveFullLaneWidth(?Driver, ?Drive, ?Motorcycle) :-
+    drive(?Driver, ?Drive),
+    passing(?Driver, ?Drive, ?Motorcycle),
+    motorcycle(?Motorcycle).
+
+// Illegal to move into the same lane space as a motorcycle.
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    motorcycle(?Motorcycle),
+    sharesLaneSpaceWith(?Driver, ?Drive, ?Motorcycle).
+
+// --- Bicycles ---
+
+// When overtaking a bicyclist from behind, must pass on the left at a safe distance
+// until the bicycle has been cleared.
+mustPassOnLeft(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    overtakingFromBehind(?Driver, ?Drive, ?Bicycle),
+    bicycle(?Bicycle).
+
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    overtakingFromBehind(?Driver, ?Drive, ?Bicycle),
+    bicycle(?Bicycle),
+    \naf passesOnLeft(?Driver, ?Drive).
+
+// --- Turn signals ---
+
+// Must signal lane change at least 100 feet before the change.
+mustSignalLaneChange(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    changingLanes(?Driver, ?Drive).
+
+illegalLaneChange(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    changingLanes(?Driver, ?Drive),
+    \naf signaledAtLeast100Feet(?Driver, ?Drive).
+
+// --- Crosswalk rule ---
+
+// Cannot pass a vehicle stopped at a crosswalk to allow a pedestrian to cross.
+illegalPass(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    vehicleStoppedAtCrosswalkForPedestrian(?Drive).
+
+// ===============================
+//  HOW TO PASS ON THE LEFT
+// ===============================
+
+// Prohibited left-pass conditions.
+illegalPassOnLeft(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    solidYellowCenterLine(?Drive).
+
+illegalPassOnLeft(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    cannotSafelyReturnBeforeSolidYellow(?Driver, ?Drive).
+
+illegalPassOnLeft(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    oncomingVehicleWithin200Feet(?Drive).
+
+illegalPassOnLeft(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    approachingCurveOrHillCrest(?Drive),
+    twoWayRoad(?Drive),
+    \naf canSeeAroundOrOver(?Drive).
+
+illegalPassOnLeft(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    within100FeetOfRailroadCrossing(?Drive),
+    twoWayRoad(?Drive).
+
+illegalPassOnLeft(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    within100FeetOfBridgeTunnelViaduct(?Drive),
+    twoWayRoad(?Drive),
+    obstructedView(?Drive).
+
+illegalPassOnLeft(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    interfereWithOncomingTraffic(?Drive).
+
+// Any prohibited condition makes the left pass illegal overall.
+illegalPass(?Driver, ?Drive) :-
+    illegalPassOnLeft(?Driver, ?Drive).
+
+// ===============================
+//  HOW TO PASS ON THE RIGHT
+// ===============================
+
+// May pass on right when vehicle ahead is making a left turn.
+mayPassOnRight(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    vehicleAheadTurningLeft(?Drive),
+    safe(?Driver, ?Drive).
+
+// May pass on right on a two-way road marked for 2+ lanes in each direction,
+// not prohibited by signs or blocked by parked cars/obstructions.
+mayPassOnRight(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    twoWayRoad(?Drive),
+    multiLaneEachDirection(?Drive),
+    \naf passingProhibitedBySign(?Drive),
+    \naf obstructedByParkedCars(?Drive),
+    safe(?Driver, ?Drive).
+
+// May pass on right on a one-way road marked for 2+ lanes.
+mayPassOnRight(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    oneWayRoad(?Drive),
+    multiLaneRoad(?Drive),
+    \naf passingProhibitedBySign(?Drive),
+    \naf obstructedByParkedCars(?Drive),
+    safe(?Driver, ?Drive).
+
+// Illegal to drive on shoulder/edge line to pass on right unless sign or officer permits.
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    drivesOnShoulder(?Driver, ?Drive),
+    \naf shoulderUsePermittedBySign(?Drive),
+    \naf directedByOfficer(?Driver, ?Drive).
+
+// ===============================
+//  BEING PASSED
+// ===============================
+
+// If passed on left, decrease speed slightly and stay in lane.
+shouldDecreaseSpeed(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    beingPassedOnLeft(?Driver, ?Drive).
+
+// If frequently passed on the right, move to right lane.
+shouldMoveToRightLane(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    frequentlyPassedOnRight(?Driver, ?Drive).
+
+// ===============================
+//  SCHOOL BUSES
+// ===============================
+
+// Identify a school bus by sign, red lights on top, and yellow-orange color.
+schoolBus(?Vehicle) :-
+    hasSchoolBusSign(?Vehicle),
+    hasRedLightsOnTop(?Vehicle),
+    yellowOrangeColor(?Vehicle).
+
+// Vehicles transporting people with disabilities, equipped as school buses: same rules.
+schoolBus(?Vehicle) :-
+    disabilityTransportVehicle(?Vehicle),
+    equippedAsSchoolBus(?Vehicle).
+
+// Yellow flashing warning lights: decrease speed and prepare to stop.
+shouldDecreaseSpeed(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    nearSchoolBus(?Drive, ?Bus),
+    schoolBus(?Bus),
+    schoolBusFlashingYellow(?Bus).
+
+shouldPrepareToStop(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    nearSchoolBus(?Drive, ?Bus),
+    schoolBus(?Bus),
+    schoolBusFlashingYellow(?Bus).
+
+// Red flashing lights on a stopped school bus: must stop at least 20 feet away.
+// Applies from either direction, including on divided highways.
+mustStopForSchoolBus(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    nearSchoolBus(?Drive, ?Bus),
+    schoolBus(?Bus),
+    schoolBusFlashingRed(?Bus),
+    schoolBusStopped(?Bus).
+
+mustStop(?Driver, ?Drive) :-
+    mustStopForSchoolBus(?Driver, ?Drive).
+
+mustStopAtLeast20FeetFromBus(?Driver, ?Drive) :-
+    mustStopForSchoolBus(?Driver, ?Drive).
+
+// Illegal to pass a stopped school bus with red lights flashing.
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    nearSchoolBus(?Drive, ?Bus),
+    schoolBus(?Bus),
+    schoolBusFlashingRed(?Bus),
+    schoolBusStopped(?Bus),
+    \naf stoppedForBus(?Driver, ?Drive).
+
+// May proceed only when bus moves or driver/officer signals.
+mayProceedPastBus(?Driver, ?Drive) :-
+    mustStopForSchoolBus(?Driver, ?Drive),
+    ( schoolBusMoving(?Drive)
+    ; busDriverSignalsProceed(?Drive)
+    ; directedByOfficer(?Driver, ?Drive)
+    ).
+
+// After stopping for school bus, drive slowly and watch for children.
+mustDriveSlowly(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    justStoppedForSchoolBus(?Driver, ?Drive).
+
+
+// ===============================
+//  CHAPTER 7: PARKING
+// ===============================
+
+// --- Parking category definitions ---
+
+// Parking: vehicle stopped (occupied or not), other than temporarily for
+// loading/unloading merchandise or passengers.
+parking(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    \naf temporaryLoadUnload(?Vehicle, ?Location).
+
+// Standing: stopped only to receive or discharge passengers.
+standing(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    receivingOrDischargingPassengers(?Vehicle, ?Location).
+
+// Stopping: bringing the vehicle to a stop, even temporarily.
+stopping(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location).
+
+// --- NO PARKING / NO STANDING / NO STOPPING sign rules ---
+
+// NO PARKING: may temporarily stop to load/discharge merchandise or passengers.
+mayStop(?Driver, ?Location) :-
+    noParkingSign(?Location),
+    temporaryLoadUnload(?Driver, ?Location).
+
+// NO STANDING: may only temporarily stop to load/discharge passengers;
+// driver cannot exit the vehicle.
+mayStop(?Driver, ?Location) :-
+    noStandingSign(?Location),
+    dischargingPassengers(?Driver, ?Location).
+
+illegalDrive(?Driver, ?Location) :-
+    noStandingSign(?Location),
+    vehicleStopped(?Driver, ?Location),
+    driverExitedVehicle(?Driver, ?Location).
+
+// NO STOPPING: may stop only to obey a sign, signal, or officer,
+// or to prevent conflict with other vehicles.
+mayStop(?Driver, ?Location) :-
+    noStoppingSign(?Location),
+    ( obeyingSignOrSignal(?Driver, ?Location)
+    ; directedByOfficer(?Driver, ?Location)
+    ; preventingConflict(?Driver, ?Location)
+    ).
+
+// --- Statewide rules: cannot park, stop, or stand ---
+
+// Within 15 feet of a fire hydrant (unless licensed driver remains in vehicle).
+illegalParkStopStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    withinFeetOfFireHydrant(?Location, ?Dist),
+    ?Dist < 15,
+    \naf licensedDriverRemainsInVehicle(?Vehicle, ?Location).
+
+// Double parking (parking on road side of a parked vehicle).
+illegalParkStopStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    doubleParked(?Vehicle, ?Location).
+
+// On a sidewalk or in a crosswalk.
+illegalParkStopStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    onSidewalk(?Location).
+
+illegalParkStopStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    inCrossWalk(?Location).
+
+// In an intersection (unless permitted by signs or parking meters).
+illegalParkStopStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    inIntersectionLoc(?Location),
+    \naf permittedBySignOrMeter(?Location).
+
+// On railroad tracks.
+illegalParkStopStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    onRailroadTracks(?Location).
+
+// Next to or opposite road work/construction if it blocks traffic.
+illegalParkStopStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    nextToRoadWork(?Location),
+    blocksTraffic(?Vehicle, ?Location).
+
+// Within 30 feet of a pedestrian safety area.
+illegalParkStopStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    withinFeetOfPedestrianSafetyArea(?Location, ?Dist),
+    ?Dist < 30.
+
+// On a bridge or in a tunnel.
+illegalParkStopStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    onBridge(?Location).
+
+illegalParkStopStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    inTunnel(?Location).
+
+// --- Parking and standing not allowed ---
+
+// In front of a driveway.
+illegalParkOrStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    inFrontOfDriveway(?Location).
+
+// Within 20 feet of a crosswalk at an intersection.
+illegalParkOrStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    withinFeetOfCrosswalkAtIntersection(?Location, ?Dist),
+    ?Dist < 20.
+
+// Within 30 feet of a traffic light, STOP sign, or YIELD sign.
+illegalParkOrStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    withinFeetOfTrafficControl(?Location, ?Dist),
+    ?Dist < 30.
+
+// Within 20 feet of a fire station driveway (or 75 feet on the opposite side).
+illegalParkOrStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    withinFeetOfFireStationDriveway(?Location, ?Dist),
+    ?Dist < 20.
+
+illegalParkOrStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    oppositeFireStationDriveway(?Location),
+    withinFeetOfFireStationOpposite(?Location, ?Dist),
+    ?Dist < 75.
+
+// Along a curb that is cut/lowered for sidewalk access (accessibility curb).
+illegalParkOrStand(?Vehicle, ?Location) :-
+    vehicleStopped(?Vehicle, ?Location),
+    accessibilityCurb(?Location).
+
+// --- Parking only restriction ---
+
+// Cannot park within 50 feet of a railroad crossing.
+illegalPark(?Vehicle, ?Location) :-
+    parking(?Vehicle, ?Location),
+    withinFeetOfRailroadCrossing(?Location, ?Dist),
+    ?Dist < 50.
+
+// Illegal parking/standing/stopping propagates to illegalDrive.
+illegalDrive(?Driver, ?Location) :-
+    illegalParkStopStand(?Driver, ?Location).
+
+illegalDrive(?Driver, ?Location) :-
+    illegalParkOrStand(?Driver, ?Location).
+
+illegalDrive(?Driver, ?Location) :-
+    illegalPark(?Driver, ?Location).
+
+// --- Hill parking ---
+
+// After parking on a hill, must set parking brake.
+mustSetParkingBrake(?Driver, ?Location) :-
+    parking(?Driver, ?Location),
+    onHill(?Location).
+
+// Must put in Park (automatic) or 1st gear (manual).
+mustEngagePark(?Driver, ?Location) :-
+    parking(?Driver, ?Location),
+    onHill(?Location),
+    automaticTransmission(?Driver).
+
+mustEngageFirstGear(?Driver, ?Location) :-
+    parking(?Driver, ?Location),
+    onHill(?Location),
+    manualTransmission(?Driver).
+
+// Must turn wheels toward the curb/side of road.
+mustTurnWheelsTowardCurb(?Driver, ?Location) :-
+    parking(?Driver, ?Location),
+    onHill(?Location).
+
+// --- Door rule ---
+
+// Must not open door on road side if it interferes with bicyclists or traffic.
+illegalDrive(?Driver, ?Location) :-
+    opensDoorOnRoadSide(?Driver, ?Location),
+    interferesBicyclistsOrTraffic(?Driver, ?Location).
+
+// --- Disability parking ---
+
+// May park in reserved disability space only if:
+// valid permit/plates AND the permit holder is in the vehicle.
+mayParkInDisabledSpace(?Driver, ?Location) :-
+    reservedDisabledParking(?Location),
+    hasDisabilityPermitOrPlates(?Driver),
+    disabledPersonInVehicle(?Driver).
+
+// Illegal to park/stop/stand in disabled space without proper permit/plates.
+illegalDrive(?Driver, ?Location) :-
+    vehicleStopped(?Driver, ?Location),
+    reservedDisabledParking(?Location),
+    \naf hasDisabilityPermitOrPlates(?Driver).
+
+// Illegal even with plates/permit if disabled person is not in the vehicle.
+illegalDrive(?Driver, ?Location) :-
+    vehicleStopped(?Driver, ?Location),
+    reservedDisabledParking(?Location),
+    hasDisabilityPermitOrPlates(?Driver),
+    \naf disabledPersonInVehicle(?Driver).
+
+// Cannot park in diagonal-striped spaces adjacent to reserved disability areas.
+illegalDrive(?Driver, ?Location) :-
+    vehicleStopped(?Driver, ?Location),
+    diagonalStripedDisabilityAccessSpace(?Location).
+
+
+// ===============================
+//  SPEED LIMITS
+// ===============================
+
+// A posted speed limit sign sets the maximum speed for a drive.
+speedLimit(?Drive, ?Limit) :-
+    speedLimitSign(?Sign, ?Limit),
+    controls(?Sign, ?Drive).
+
+// Default (statutory) speed limits when no sign is posted.
+speedLimit(?Drive, 55) :-
+    \naf postedSpeedLimit(?Drive),
+    highway(?Drive).
+
+speedLimit(?Drive, 30) :-
+    \naf postedSpeedLimit(?Drive),
+    residentialArea(?Drive).
+
+speedLimit(?Drive, 15) :-
+    \naf postedSpeedLimit(?Drive),
+    schoolZone(?Drive).
+
+speedLimit(?Drive, 25) :-
+    \naf postedSpeedLimit(?Drive),
+    businessDistrict(?Drive).
+
+// Helper: a drive has a posted speed limit if a sign explicitly sets one.
+postedSpeedLimit(?Drive) :-
+    speedLimitSign(?Sign, ?Limit),
+    controls(?Sign, ?Drive).
+
+// Illegal to exceed the posted or statutory speed limit.
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    drivingSpeed(?Driver, ?Drive, ?Speed),
+    speedLimit(?Drive, ?Limit),
+    ?Speed > ?Limit.
+
+// School zone: must reduce speed to 15 MPH when children are present.
+mustReduceSpeed(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    schoolZone(?Drive),
+    schoolChildrenPresent(?Drive).
+
+// Work zone: minimum slower speed required (25 MPH cap already encoded elsewhere).
+// Speed limit signs in work zones take precedence.
+speedLimit(?Drive, ?Limit) :-
+    workZoneSpeedLimitSign(?Sign, ?Limit),
+    controls(?Sign, ?Drive).
+
+
+// ===============================
+//  RAILROAD CROSSINGS
+// ===============================
+
+// Must stop within 15-50 feet of a railroad crossing when:
+// - signal is flashing or gate is lowering/down
+// - flagman signals to stop
+// - a train is approaching, passing, or blocking the crossing
+mustStopAtRailroadCrossing(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    approachingRailroadCrossing(?Drive, ?Crossing),
+    railroadSignalFlashing(?Crossing).
+
+mustStopAtRailroadCrossing(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    approachingRailroadCrossing(?Drive, ?Crossing),
+    crossingGateLowering(?Crossing).
+
+mustStopAtRailroadCrossing(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    approachingRailroadCrossing(?Drive, ?Crossing),
+    crossingGateDown(?Crossing).
+
+mustStopAtRailroadCrossing(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    approachingRailroadCrossing(?Drive, ?Crossing),
+    flagmanSignalsStop(?Crossing).
+
+mustStopAtRailroadCrossing(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    approachingRailroadCrossing(?Drive, ?Crossing),
+    trainApproaching(?Crossing).
+
+mustStopAtRailroadCrossing(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    approachingRailroadCrossing(?Drive, ?Crossing),
+    trainBlockingCrossing(?Crossing).
+
+mustStop(?Driver, ?Drive) :-
+    mustStopAtRailroadCrossing(?Driver, ?Drive).
+
+// Must stop at least 15 feet from the nearest rail.
+mustStopAtLeast15FeetFromRail(?Driver, ?Drive) :-
+    mustStopAtRailroadCrossing(?Driver, ?Drive).
+
+// Cannot proceed until safe: all trains have passed AND the gate/signal is clear.
+mayProceedAtRailroadCrossing(?Driver, ?Drive) :-
+    mustStopAtRailroadCrossing(?Driver, ?Drive),
+    \naf trainApproaching(?Crossing),
+    \naf trainBlockingCrossing(?Crossing),
+    \naf railroadSignalFlashing(?Crossing),
+    \naf crossingGateDown(?Crossing),
+    approachingRailroadCrossing(?Drive, ?Crossing).
+
+// Illegal to stop ON the tracks (cannot move forward means don't enter).
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    stoppedOnRailroadTracks(?Driver, ?Drive).
+
+// Must look both ways and listen for trains before crossing.
+mustLookAndListenAtCrossing(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    approachingRailroadCrossing(?Drive, ?Crossing).
+
+// Must not pass a vehicle stopped at a railroad crossing (same rule as crosswalk).
+illegalPass(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    vehicleStoppedAtRailroadCrossing(?Drive).
+
+// Certain vehicles must always stop at all railroad crossings regardless of signal:
+// buses, school buses, vehicles carrying hazardous materials.
+mustAlwaysStopAtRailroadCrossing(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    approachingRailroadCrossing(?Drive, ?Crossing),
+    ( schoolBus(?Driver)
+    ; passengerBus(?Driver)
+    ; carryingHazardousMaterials(?Driver)
+    ).
+
+mustStop(?Driver, ?Drive) :-
+    mustAlwaysStopAtRailroadCrossing(?Driver, ?Drive).
+
+
+// ===============================
+//  TURN SIGNALS AT INTERSECTIONS
+// ===============================
+
+// Must signal turns at intersections at least 100 feet before turning.
+mustSignalTurn(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    approachingIntersection(?Drive, ?Intersection),
+    ( leftTurn(?Driver, ?Drive)
+    ; rightTurn(?Driver, ?Drive)
+    ).
+
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    approachingIntersection(?Drive, ?Intersection),
+    ( leftTurn(?Driver, ?Drive)
+    ; rightTurn(?Driver, ?Drive)
+    ),
+    \naf signaledAtLeast100Feet(?Driver, ?Drive).
+
+// Hand/arm signals are also acceptable (in lieu of turn signal lamps).
+validTurnSignal(?Driver, ?Drive) :-
+    usedTurnSignalLamp(?Driver, ?Drive).
+
+validTurnSignal(?Driver, ?Drive) :-
+    usedHandAndArmSignal(?Driver, ?Drive).
+
+// If a valid signal was given at least 100 feet before — legal.
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    approachingIntersection(?Drive, ?Intersection),
+    ( leftTurn(?Driver, ?Drive)
+    ; rightTurn(?Driver, ?Drive)
+    ),
+    \naf validTurnSignal(?Driver, ?Drive).
+
+
+// ===============================
+//  METERED / TIME-LIMITED PARKING
+// ===============================
+
+// A vehicle is parked in a metered space.
+// Expired meter = illegal parking.
+illegalDrive(?Driver, ?Location) :-
+    parking(?Driver, ?Location),
+    meteredSpace(?Location),
+    meterExpired(?Location).
+
+// Time-limit zone: parking beyond the posted time limit is illegal.
+illegalDrive(?Driver, ?Location) :-
+    parking(?Driver, ?Location),
+    timeLimitZone(?Location, ?LimitMinutes),
+    parkedDuration(?Driver, ?Location, ?Minutes),
+    ?Minutes > ?LimitMinutes.
+
+// Cannot re-park on the same block to reset a time limit ("meter feeding" only
+// applies to meters, time-limit zones prohibit moving and coming back).
+illegalDrive(?Driver, ?Location) :-
+    parking(?Driver, ?Location),
+    timeLimitZone(?Location, ?LimitMinutes),
+    cumulativeBlockTime(?Driver, ?Location, ?TotalMinutes),
+    ?TotalMinutes > ?LimitMinutes.
+
+
+// ===============================
+//  FUNERAL PROCESSIONS
+// ===============================
+
+// All vehicles in a funeral procession have the right-of-way as a unit,
+// even through red lights and stop signs — but must yield to emergency vehicles.
+inFuneralProcession(?Vehicle) :-
+    processionVehicle(?Vehicle, ?Procession),
+    funeralProcession(?Procession).
+
+// Procession vehicles may proceed through controlled intersections as a unit.
+mayProceed(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    inFuneralProcession(?Driver),
+    processionMovingThrough(?Driver, ?Drive).
+
+// Other drivers must yield to a funeral procession.
+mustYield(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    funeralProcessionCrossing(?Drive),
+    \naf inFuneralProcession(?Driver).
+
+// Illegal to cut into or interfere with a funeral procession.
+illegalDrive(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    \naf inFuneralProcession(?Driver),
+    cutsIntoFuneralProcession(?Driver, ?Drive).
+
+// Procession must yield to emergency vehicles (ambulance, fire, police).
+mustYield(?Driver, ?Drive) :-
+    drive(?Driver, ?Drive),
+    inFuneralProcession(?Driver),
+    emergencyVehicleApproaching(?Drive).
